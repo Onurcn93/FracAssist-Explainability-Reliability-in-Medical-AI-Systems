@@ -47,6 +47,95 @@ All experiments are implemented as plain Python scripts.
 
 ---
 
+## Installation
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## Supported Models
+
+| Model | Task | Phase |
+|-------|------|-------|
+| YOLOv8s | Fracture localization (detect) | 2 |
+| YOLOv8s-seg | Fracture segmentation | 2 |
+| ResNet-18 | Binary classification | 1 |
+| CBM / Prototypes / Counterfactuals | XAI explainability | 3 |
+
+---
+
+## Key Arguments
+
+| Argument | Values | Description |
+|----------|--------|-------------|
+| `--config` | path to YAML | Experiment config file |
+| `--task` | key in config / `all` | Which experiment(s) to run |
+| `--no-plot` | flag | Disable plot generation |
+| `--weights` | path to `.pt` | Weights for standalone evaluation |
+| `--split` | `val` / `test` | Eval split — use `test` only for final reporting |
+
+---
+
+## Usage
+
+### 1. Prepare dataset (one-time)
+
+```bash
+python data/prepare_yolo.py
+```
+
+Reads the official FracAtlas Fracture Split CSVs and builds the YOLO folder
+structure under `data/dataset_yolo/`. Run once — output persists locally.
+
+```bash
+python data/prepare_yolo.py --clean   # wipe and rebuild from scratch
+```
+
+### 2. Train
+
+```bash
+python main.py --config configs/yolo_baseline.yaml --task localization
+python main.py --config configs/yolo_baseline.yaml --task segmentation
+python main.py --config configs/yolo_baseline.yaml --task all
+```
+
+`--task all` runs every entry in the config file sequentially.
+`--no-plot` disables figure generation (overrides config).
+
+### 3. Evaluate
+
+```bash
+python models/yolo/evaluate.py \
+    --weights weights/Y0_best.pt \
+    --data    data/dataset_yolo/data.yaml \
+    --task    detect \
+    --imgsz   600
+```
+
+Use `--split val` during development (default). Use `--split test` only for
+final per-phase reporting.
+
+### Config format
+
+```yaml
+# configs/yolo_baseline.yaml
+localization:
+  experiment_id : "Y0"
+  task          : "detect"
+  model_weights : "yolov8s.pt"
+  data_yaml     : "data/dataset_yolo/data.yaml"
+  epochs        : 30
+  imgsz         : 600
+  device        : "0"        # GPU index, or "cpu"
+  plot          : true
+```
+
+Each top-level key is a runnable task. Add new experiments by adding new keys.
+
+---
+
 ## Dataset Setup
 
 FracAtlas is not committed to this repository. Download from Figshare and place at the

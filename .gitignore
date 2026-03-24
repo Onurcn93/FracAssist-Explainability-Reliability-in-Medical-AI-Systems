@@ -9,6 +9,9 @@ FracAtlas/
 results/
 weights/
 
+# Generated YOLO dataset staging area
+data/dataset_yolo/
+
 # YOLO runtime outputs
 runs/
 

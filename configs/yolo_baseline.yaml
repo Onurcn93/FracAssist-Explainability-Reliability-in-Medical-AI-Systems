@@ -1,0 +1,27 @@
+# configs/yolo_baseline.yaml
+#
+# Baseline reproduction of Abedeen et al. (2023) — FracAtlas paper.
+# Exact config used by the authors. Do not modify for Y0/YS0 runs.
+#
+# Y0  — localization  (task: detect,  model: yolov8s.pt)
+# YS0 — segmentation  (task: segment, model: yolov8s-seg.pt)
+
+localization:
+  experiment_id : "Y0"
+  task          : "detect"
+  model_weights : "yolov8s.pt"
+  data_yaml     : "data/dataset_yolo/data.yaml"
+  epochs        : 30
+  imgsz         : 600
+  device        : "0"
+  plot          : true
+
+segmentation:
+  experiment_id : "YS0"
+  task          : "segment"
+  model_weights : "yolov8s-seg.pt"
+  data_yaml     : "data/dataset_yolo/data.yaml"
+  epochs        : 30
+  imgsz         : 600
+  device        : "0"
+  plot          : true
