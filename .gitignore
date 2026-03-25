@@ -9,11 +9,19 @@ FracAtlas/
 results/
 weights/
 
-# Generated YOLO dataset staging area
+# Generated YOLO dataset staging areas
 data/dataset_yolo/
+data/dataset_yolo_seg/
 
 # YOLO runtime outputs
 runs/
+
+# Author reference notebooks (not part of our codebase)
+*.ipynb
+_nb_analysis.txt
+
+# Model weights (downloaded by Ultralytics or copied to weights/)
+*.pt
 
 # Python
 *.pyc

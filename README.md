@@ -83,15 +83,19 @@ pip install -r requirements.txt
 ### 1. Prepare dataset (one-time)
 
 ```bash
-python data/prepare_yolo.py
+# Detection dataset (bbox labels)
+python data/prepare_yolo.py --n_neg -1
+
+# Segmentation dataset (COCO polygon labels)
+python data/prepare_yolo.py --seg --n_neg -1
 ```
 
 Reads the official FracAtlas Fracture Split CSVs and builds the YOLO folder
-structure under `data/dataset_yolo/`. Run once — output persists locally.
+structures under `data/dataset_yolo/` and `data/dataset_yolo_seg/`.
 
-```bash
-python data/prepare_yolo.py --clean   # wipe and rebuild from scratch
-```
+`--n_neg -1` includes all 3,366 non-fractured images as negatives in training.
+`--n_neg 0` uses fractured images only.
+`--clean` wipes and rebuilds the output directory from scratch.
 
 ### 2. Train
 
@@ -165,15 +169,29 @@ FracAtlas/
 
 ---
 
-## Phase 2 — YOLO Baseline (Abedeen et al., 2023)
+## Phase 2 — YOLO Baseline
+
+### Paper targets (Abedeen et al., 2023 — Ultralytics 8.0.49, SGD)
 
 | Task | Model | Box P | Box R | mAP@0.5 | Mask P | Mask R | Mask mAP@0.5 |
 |------|-------|-------|-------|---------|--------|--------|--------------|
 | Localization | YOLOv8s | 0.807 | 0.473 | 0.562 | — | — | — |
 | Segmentation | YOLOv8s-seg | 0.718 | 0.607 | 0.627 | 0.830 | 0.499 | 0.589 |
 
+### Our v1 baselines (Ultralytics 8.4.27, AdamW, fractured-only train)
+
+| Task | Model | Box P | Box R | mAP@0.5 | Mask P | Mask R | Mask mAP@0.5 |
+|------|-------|-------|-------|---------|--------|--------|--------------|
+| Localization (Y0) | YOLOv8s | 0.641 | 0.538 | 0.516 | — | — | — |
+| Segmentation (YS0) | YOLOv8s-seg | 0.715 | 0.527 | 0.539 | 0.715 | 0.527 | 0.529 |
+
 Config: `epochs=30`, `imgsz=600`, COCO pre-trained weights, Ultralytics defaults.
 Split: 574 train / 82 val / 61 test (fractured images only).
+
+> **Reproduction note:** Version drift between Ultralytics 8.0.49 (paper) and 8.4.27
+> introduces different augmentation defaults (erasing, rle) and optimizer auto-selection
+> (AdamW vs SGD). The paper's notebook also trained on 635/608 images vs the 574
+> documented in the paper text, suggesting non-fractured negatives were included.
 
 ---
 

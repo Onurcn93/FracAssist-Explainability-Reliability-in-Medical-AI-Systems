@@ -124,14 +124,16 @@ def run_training(config: dict) -> Path:
     # ── Train ────────────────────────────────────────────────────── #
     model = YOLO(config["model_weights"])
     model.train(
-        task    = task,
-        data    = config["data_yaml"],
-        epochs  = config["epochs"],
-        imgsz   = config["imgsz"],
-        device  = config["device"],
-        project = "runs",
-        name    = exp_id,
-        exist_ok= True,
+        task      = task,
+        data      = config["data_yaml"],
+        epochs    = config["epochs"],
+        imgsz     = config["imgsz"],
+        optimizer = config.get("optimizer", "auto"),
+        lr0       = config.get("lr0", 0.01),
+        momentum  = config.get("momentum", 0.937),
+        device    = config["device"],
+        name      = exp_id,
+        exist_ok  = True,
     )
 
     # ── Parse results.csv ────────────────────────────────────────── #

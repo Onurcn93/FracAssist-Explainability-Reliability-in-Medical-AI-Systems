@@ -20,7 +20,7 @@ segmentation:
   experiment_id : "YS0"
   task          : "segment"
   model_weights : "yolov8s-seg.pt"
-  data_yaml     : "data/dataset_yolo/data.yaml"
+  data_yaml     : "data/dataset_yolo_seg/data.yaml"
   epochs        : 30
   imgsz         : 600
   device        : "0"
