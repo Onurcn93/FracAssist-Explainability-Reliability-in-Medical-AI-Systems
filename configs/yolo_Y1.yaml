@@ -1,0 +1,74 @@
+# configs/yolo_Y1.yaml
+#
+# Y1 — Extended training on Y0B split (635 train, AdamW).
+# Goal: push past the 30-epoch plateau seen in Y0 runs.
+#
+# Both variants use the same split as Y0B:
+#   Detect:  data/dataset_yolo_Y0B/data.yaml
+#   Segment: data/dataset_yolo_seg_Y0B/data.yaml
+#
+# Y1A — Aggressive early stopping
+#   epochs=100, patience=10
+#   Stops fast if val mAP stalls; lower compute cost
+#
+# Y1B — Permissive early stopping (Ultralytics default)
+#   epochs=200, patience=50
+#   Allows longer plateau recovery; finds deeper convergence
+#
+# Run commands:
+#   python main.py --config configs/yolo_Y1.yaml --task Y1A_localization
+#   python main.py --config configs/yolo_Y1.yaml --task Y1B_localization
+#   python main.py --config configs/yolo_Y1.yaml --task Y1A_segmentation
+#   python main.py --config configs/yolo_Y1.yaml --task Y1B_segmentation
+
+# ── Y1A Localization ─────────────────────────────────────────────────────── #
+
+Y1A_localization:
+  experiment_id : "Y1A_detect"
+  task          : "detect"
+  model_weights : "yolov8s.pt"
+  data_yaml     : "data/dataset_yolo_Y0B/data.yaml"
+  epochs        : 100
+  patience      : 10
+  imgsz         : 600
+  device        : "0"
+  plot          : true
+
+# ── Y1B Localization ─────────────────────────────────────────────────────── #
+
+Y1B_localization:
+  experiment_id : "Y1B_detect"
+  task          : "detect"
+  model_weights : "yolov8s.pt"
+  data_yaml     : "data/dataset_yolo_Y0B/data.yaml"
+  epochs        : 200
+  patience      : 50
+  imgsz         : 600
+  device        : "0"
+  plot          : true
+
+# ── Y1A Segmentation ─────────────────────────────────────────────────────── #
+
+Y1A_segmentation:
+  experiment_id : "Y1A_seg"
+  task          : "segment"
+  model_weights : "yolov8s-seg.pt"
+  data_yaml     : "data/dataset_yolo_seg_Y0B/data.yaml"
+  epochs        : 100
+  patience      : 10
+  imgsz         : 600
+  device        : "0"
+  plot          : true
+
+# ── Y1B Segmentation ─────────────────────────────────────────────────────── #
+
+Y1B_segmentation:
+  experiment_id : "Y1B_seg"
+  task          : "segment"
+  model_weights : "yolov8s-seg.pt"
+  data_yaml     : "data/dataset_yolo_seg_Y0B/data.yaml"
+  epochs        : 200
+  patience      : 50
+  imgsz         : 600
+  device        : "0"
+  plot          : true
