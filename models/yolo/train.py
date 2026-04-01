@@ -123,20 +123,26 @@ def run_training(config: dict) -> Path:
 
     # ── Train ────────────────────────────────────────────────────── #
     model = YOLO(config["model_weights"])
-    model.train(
+    train_kwargs = dict(
         task      = task,
         data      = config["data_yaml"],
         epochs    = config["epochs"],
         imgsz     = config["imgsz"],
         optimizer = config.get("optimizer", "auto"),
-        lr0       = config.get("lr0", 0.01),
-        momentum  = config.get("momentum", 0.937),
         device    = config["device"],
         patience  = config.get("patience", 50),
         seed      = config.get("seed", 42),
         name      = exp_id,
         exist_ok  = True,
     )
+    if "batch" in config:
+        train_kwargs["batch"] = config["batch"]
+    if "lr0" in config:
+        train_kwargs["lr0"] = config["lr0"]
+    if "momentum" in config:
+        train_kwargs["momentum"] = config["momentum"]
+
+    model.train(**train_kwargs)
 
     # ── Parse results.csv ────────────────────────────────────────── #
     results_csv = Path("runs") / task / exp_id / "results.csv"

@@ -17,7 +17,7 @@ annotated for classification, localization, and segmentation.
 | Phase | Model | Task | Primary Metric | Status |
 |-------|-------|------|----------------|--------|
 | 1 | ResNet-18 | Binary fracture classification | F1 (fractured class) | Complete |
-| 2 | YOLOv8s / YOLOv8s-seg | Localization & segmentation | mAP@0.5 | Active |
+| 2 | YOLOv8s / YOLOv8s-seg / YOLOv8m | Localization & segmentation | mAP@0.5 | Active |
 | 3 | CBM + Prototypes + Counterfactuals | XAI — three-pillar architecture | Task-specific | Pending |
 
 Phase 3 is the core thesis contribution: integrating clinically-grounded attribute
@@ -32,7 +32,11 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 /
 ├── configs/                  # Experiment config files (YAML)
 │   ├── yolo_baseline.yaml    # Original Y0 runs (fractured-only, mixed optimizers)
-│   └── yolo_Y0.yaml          # Three-way reproduction: Y0A / Y0B / Y0C
+│   ├── yolo_Y0.yaml          # Three-way reproduction: Y0A / Y0B / Y0C
+│   ├── yolo_Y1.yaml          # Extended training: Y1A (patience=10) / Y1B (patience=50)
+│   ├── yolo_Y2.yaml          # Resolution ablation: imgsz=640 (COCO-standard)
+│   ├── yolo_Y3.yaml          # Resolution ablation: imgsz=800, batch=8 (VRAM limit)
+│   └── yolo_Y4.yaml          # Capacity ablation: YOLOv8m (25.9M params)
 ├── data/                     # Data preparation scripts
 ├── models/
 │   ├── classification/       # ResNet-18 experiments (E-series)
@@ -63,6 +67,8 @@ pip install -r requirements.txt
 |-------|------|-------|
 | YOLOv8s | Fracture localization (detect) | 2 |
 | YOLOv8s-seg | Fracture segmentation | 2 |
+| YOLOv8m | Fracture localization (detect) — capacity ablation | 2 |
+| YOLOv8m-seg | Fracture segmentation — capacity ablation | 2 |
 | ResNet-18 | Binary classification | 1 |
 | CBM / Prototypes / Counterfactuals | XAI explainability | 3 |
 
@@ -156,13 +162,19 @@ Y0A_localization:
   model_weights : "yolov8s.pt"
   data_yaml     : "data/dataset_yolo_Y0A/data.yaml"
   epochs        : 30
+  patience      : 50          # early stopping; omit to use YOLO default (50)
   imgsz         : 600
-  device        : "0"        # GPU index, or "cpu"
-  optimizer     : "SGD"      # explicit for Y0A paper reproduction; omit for AdamW auto
-  lr0           : 0.01
-  momentum      : 0.937
+  batch         : 16          # optional — omit to use YOLO default (16)
+  device        : "0"         # GPU index, or "cpu"
+  optimizer     : "SGD"       # explicit for Y0A paper reproduction; omit for auto
+  lr0           : 0.01        # optional — only set if overriding auto optimizer
+  momentum      : 0.937       # optional — only set if overriding auto optimizer
   plot          : true
 ```
+
+`batch`, `lr0`, and `momentum` are optional — omit them to let YOLO's auto optimizer
+select appropriate values. Only set these when explicitly reproducing a specific
+configuration (e.g., Y0A SGD reproduction).
 
 Each top-level key is a runnable task. Add new experiments by adding new keys.
 
@@ -239,6 +251,29 @@ paper text. The test split (61 images) was included in training.
 | Segmentation | — | — | — | — | — | — |
 
 Config: `epochs=30`, `imgsz=600`, COCO pre-trained weights, `seed=42`.
+
+### Y1 — Extended training (epochs=200, patience=50, Y0B split)
+
+| Run | Epochs (stopped) | Box mAP@0.5 | Mask mAP@0.5 | P | R |
+|-----|-----------------|-------------|--------------|---|---|
+| Y1A detect | 62 | 0.508 | — | 0.674 | 0.440 |
+| Y1B detect | 200 | **0.651** | — | 0.761 | 0.595 |
+| Y1A seg | 58 | 0.580 | 0.518 | 0.691 | 0.466 |
+| Y1B seg | 179 | **0.608** | **0.546** | 0.802 | 0.516 |
+
+Y1A uses `patience=10` (aggressive); Y1B uses `patience=50`. Y1A stopped early in both
+tasks — patience=10 is too aggressive for this dataset. Y1B is the best baseline going
+forward. Y1B detect is +8.9pp above the paper; Y1B seg mask mAP is −4.3pp below paper.
+
+### Y2 / Y3 / Y4 — Ablations (pending)
+
+| Exp | Change from Y1B | imgsz | Model | Batch |
+|-----|----------------|-------|-------|-------|
+| Y2 | COCO-standard resolution | 640 | YOLOv8s | 16 |
+| Y3 | Higher resolution — fine edge features | 800 | YOLOv8s | 8 |
+| Y4 | Larger model — capacity ablation | 600 | YOLOv8m | 16 |
+
+All ablations: `epochs=200`, `patience=50`, `optimizer=auto`, `seed=42`, Y0B split.
 
 > **Reproduction notes:**
 > - Version drift between Ultralytics 8.0.49 (paper) and 8.4.27 introduces new

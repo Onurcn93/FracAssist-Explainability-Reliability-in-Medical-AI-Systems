@@ -1,0 +1,39 @@
+# configs/yolo_Y2.yaml
+#
+# Y2 — Standard resolution (imgsz=640).
+# Hypothesis: aligning with COCO pre-training resolution may improve
+# transfer learning initialisation vs the paper's non-standard 600px.
+#
+# Same split as Y1B: Y0B (635 train, AdamW→auto, seed=42).
+# Optimizer: auto (YOLO selects AdamW for fine-tuning tasks by default).
+# epochs=200, patience=50 — proven best-practice from Y1B.
+#
+# Run commands:
+#   python main.py --config configs/yolo_Y2.yaml --task Y2_localization
+#   python main.py --config configs/yolo_Y2.yaml --task Y2_segmentation
+
+# ── Y2 Localization ──────────────────────────────────────────────────────── #
+
+Y2_localization:
+  experiment_id : "Y2_detect"
+  task          : "detect"
+  model_weights : "yolov8s.pt"
+  data_yaml     : "data/dataset_yolo_Y0B/data.yaml"
+  epochs        : 200
+  patience      : 50
+  imgsz         : 640
+  device        : "0"
+  plot          : true
+
+# ── Y2 Segmentation ──────────────────────────────────────────────────────── #
+
+Y2_segmentation:
+  experiment_id : "Y2_seg"
+  task          : "segment"
+  model_weights : "yolov8s-seg.pt"
+  data_yaml     : "data/dataset_yolo_seg_Y0B/data.yaml"
+  epochs        : 200
+  patience      : 50
+  imgsz         : 640
+  device        : "0"
+  plot          : true
