@@ -2,16 +2,15 @@
 inference/predict.py — FracAssist inference module.
 
 Selective ensemble logic:
-  YOLO-LED    : YOLO fires a box (conf >= 0.25) → fracture confirmed by detector.
+  YOLO-LED       : YOLO fires a box (conf >= 0.25) → fracture confirmed by detector.
   CLASSIFIER-LED : YOLO no box → ResNet-18 decides (if loaded); else defaults Non-Fractured.
 
 GradCAM always generated on the ResNet-18 branch when ResNet is loaded.
 
 ResNet-18 weights are optional at startup — the module degrades gracefully if
-resnet18_e4e.pth is not yet present (YOLO-only mode until weights are placed).
+E4e_best.pth is not yet present (YOLO-only mode until weights are placed).
 """
 
-import base64
 import os
 
 import cv2
@@ -22,12 +21,16 @@ from PIL import Image
 from torchvision import models, transforms
 from ultralytics import YOLO
 
+import utils.gradcam as gradcam_utils
+
 # ---------------------------------------------------------------------------
 # Module-level model handles — loaded once at startup, reused per request
 # ---------------------------------------------------------------------------
-_yolo_model = None
-_resnet_model = None
+_yolo_model    = None
+_resnet_model  = None
 _resnet_loaded = False
+_frac_idx      = 0      # Fractured class index (0 for FracAtlas ImageFolder)
+_val_threshold = 0.5    # Updated from checkpoint at load time
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +40,7 @@ _resnet_loaded = False
 def load_models(config):
     """Load YOLO and (optionally) ResNet-18 from paths in config.
     Called once at app startup. Raises FileNotFoundError if YOLO weights missing."""
-    global _yolo_model, _resnet_model, _resnet_loaded
+    global _yolo_model, _resnet_model, _resnet_loaded, _frac_idx, _val_threshold
 
     # --- YOLO (required) ---
     yolo_path = config["yolo_weights"]
@@ -53,13 +56,39 @@ def load_models(config):
     resnet_path = config["resnet_weights"]
     if os.path.exists(resnet_path):
         device = config["device"]
+
+        # Load checkpoint — our training format wraps state_dict in a dict
+        ckpt = torch.load(resnet_path, map_location=device)
+        if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
+            state       = ckpt["model_state_dict"]
+            _frac_idx      = ckpt.get("frac_idx",       0)
+            _val_threshold = ckpt.get("val_threshold",  config["resnet_threshold"])
+        else:
+            # Legacy raw state dict
+            state          = ckpt
+            _frac_idx      = 0
+            _val_threshold = config["resnet_threshold"]
+
+        # Reconstruct architecture from state dict key shape
+        # With dropout head:    fc.0 = Dropout, fc.1 = Linear → key "fc.1.weight"
+        # Without dropout head: fc   = Linear               → key "fc.weight"
+        has_dropout = "fc.1.weight" in state
+
         m = models.resnet18(weights=None)
-        m.fc = nn.Sequential(nn.Dropout(0.3), nn.Linear(512, 1))
-        m.load_state_dict(torch.load(resnet_path, map_location=device))
+        if has_dropout:
+            m.fc = nn.Sequential(nn.Dropout(0.3), nn.Linear(512, 2))
+        else:
+            m.fc = nn.Linear(512, 2)
+
+        m.load_state_dict(state)
         m.eval()
         _resnet_model = m.to(device)
         _resnet_loaded = True
-        print(f"[INFO] ResNet-18 loaded: {resnet_path} (device={device})")
+        print(
+            f"[INFO] ResNet-18 loaded: {resnet_path} "
+            f"(device={device}, frac_idx={_frac_idx}, threshold={_val_threshold:.3f}, "
+            f"dropout_head={has_dropout})"
+        )
     else:
         print(
             f"[WARN] ResNet-18 weights not found at {resnet_path}. "
@@ -75,11 +104,15 @@ def load_models(config):
 # ---------------------------------------------------------------------------
 
 def preprocess_resnet(image_path, config):
-    """Val/test transform pipeline — no augmentation, no random crop.
-    Returns a (1, 3, 224, 224) float tensor."""
+    """Val/test transform — matches the val_tf used during training exactly.
+
+    Resize to (input_size × input_size), Grayscale → 3ch, ToTensor, Normalize.
+    Returns a (1, 3, input_size, input_size) float tensor.
+    """
+    size = config["resnet_input_size"]
     transform = transforms.Compose([
-        transforms.Resize(config["resnet_resize"]),
-        transforms.CenterCrop(config["resnet_input_size"]),
+        transforms.Resize((size, size)),
+        transforms.Grayscale(num_output_channels=3),   # X-ray 1ch → 3ch for ImageNet model
         transforms.ToTensor(),
         transforms.Normalize(
             mean=config["imagenet_mean"],
@@ -114,80 +147,18 @@ def run_yolo(model, image_path, config):
 
 
 def run_resnet(model, tensor, config):
-    """Forward pass with sigmoid + fixed threshold 0.425.
-    Returns (label: str, probability: float)."""
-    device = config["device"]
-    with torch.no_grad():
-        logit = model(tensor.to(device))
-        prob = float(torch.sigmoid(logit))
-    label = "Fractured" if prob >= config["resnet_threshold"] else "Non-Fractured"
-    return label, prob
+    """Softmax forward pass, threshold on fracture class probability.
 
-
-# ---------------------------------------------------------------------------
-# GradCAM
-# ---------------------------------------------------------------------------
-
-def generate_gradcam(model, tensor, image_path, device):
-    """GradCAM on model.layer4[-1].
-
-    Steps:
-      1. Register forward hook  → capture activations
-      2. Register backward hook → capture gradients
-      3. Forward pass → backward pass (no torch.no_grad here — needs grad graph)
-      4. Global-average-pool gradients → weights
-      5. Weighted sum of activations → ReLU → normalise
-      6. Resize, apply JET colormap, blend alpha=0.5 with original
-      7. Remove hooks in finally block (prevents memory leak)
-
-    Returns base64-encoded PNG string (data:image/png;base64,...).
+    Returns (label: str, probability: float) where probability is the
+    model's confidence that the image contains a fracture.
     """
-    activations = {}
-    gradients = {}
-
-    target_layer = model.layer4[-1]
-
-    def _fwd_hook(module, inp, out):
-        activations["feat"] = out.detach().clone()
-
-    def _bwd_hook(module, grad_in, grad_out):
-        gradients["feat"] = grad_out[0].detach().clone()
-
-    h_fwd = target_layer.register_forward_hook(_fwd_hook)
-    h_bwd = target_layer.register_full_backward_hook(_bwd_hook)
-
-    try:
-        model.zero_grad()
-        t = tensor.to(device)
-        output = model(t)           # (1, 1), has grad_fn via model params
-        output.squeeze().backward() # scalar backward — computes all gradients
-
-        act  = activations["feat"].squeeze(0)   # (C, H, W)
-        grad = gradients["feat"].squeeze(0)     # (C, H, W)
-        weights = grad.mean(dim=[1, 2])         # (C,)  — global avg pool
-
-        cam = torch.relu((weights[:, None, None] * act).sum(0))  # (H, W)
-        cam = cam - cam.min()
-        if cam.max() > 0:
-            cam = cam / cam.max()
-        cam_np = cam.cpu().numpy()
-
-        # Read original, resize to 224×224 for overlay
-        orig = cv2.imread(image_path)
-        if orig is None:
-            orig = np.zeros((224, 224, 3), dtype=np.uint8)
-        orig_resized = cv2.resize(orig, (224, 224))
-
-        cam_u8  = np.uint8(255 * cv2.resize(cam_np, (224, 224)))
-        heatmap = cv2.applyColorMap(cam_u8, cv2.COLORMAP_JET)
-        blended = cv2.addWeighted(orig_resized, 0.5, heatmap, 0.5, 0)
-
-        return _encode_base64(blended)
-
-    finally:
-        h_fwd.remove()
-        h_bwd.remove()
-        model.zero_grad()  # Clean up accumulated parameter gradients
+    device    = config["device"]
+    threshold = _val_threshold
+    with torch.no_grad():
+        logits = model(tensor.to(device))                      # (1, 2)
+        prob   = float(torch.softmax(logits, dim=1)[0, _frac_idx])
+    label = "Fractured" if prob >= threshold else "Non-Fractured"
+    return label, prob
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +167,9 @@ def generate_gradcam(model, tensor, image_path, device):
 
 def _encode_base64(img_bgr):
     """Encode a BGR numpy image as a data:image/png;base64,... string."""
-    _, buf = cv2.imencode(".png", img_bgr)
+    import base64
+    import cv2 as _cv2
+    _, buf = _cv2.imencode(".png", img_bgr)
     return "data:image/png;base64," + base64.b64encode(buf).decode("utf-8")
 
 
@@ -214,7 +187,7 @@ def _draw_bbox_base64(image_path, bbox, confidence):
     if img is None:
         return None
     x1, y1, x2, y2 = [int(v) for v in bbox]
-    red_bgr = (0, 91, 255)  # BGR red matching the UI's --fa-red
+    red_bgr = (0, 91, 255)   # BGR red matching the UI's --fa-red
     cv2.rectangle(img, (x1, y1), (x2, y2), red_bgr, 2)
     label = f"FRACTURE {confidence:.0%}"
     (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
@@ -276,8 +249,10 @@ def predict(image_path, config):
             tensor = preprocess_resnet(image_path, config)
             _, prob = run_resnet(_resnet_model, tensor, config)
             result["resnet_probability"] = prob
-            result["gradcam_image"] = generate_gradcam(
-                _resnet_model, tensor, image_path, config["device"]
+            result["gradcam_image"] = gradcam_utils.to_base64(
+                _resnet_model, tensor, image_path,
+                _frac_idx, config["device"],
+                layer_name=config.get("gradcam_layer", "layer4"),
             )
         else:
             # No ResNet yet — use box overlay as the GradCAM slot placeholder
@@ -295,8 +270,10 @@ def predict(image_path, config):
             result["label"]                = label
             result["resnet_probability"]   = prob
             result["fracture_probability"] = prob
-            result["gradcam_image"] = generate_gradcam(
-                _resnet_model, tensor, image_path, config["device"]
+            result["gradcam_image"] = gradcam_utils.to_base64(
+                _resnet_model, tensor, image_path,
+                _frac_idx, config["device"],
+                layer_name=config.get("gradcam_layer", "layer4"),
             )
         else:
             # YOLO-only mode, no box found → default to Non-Fractured, show image

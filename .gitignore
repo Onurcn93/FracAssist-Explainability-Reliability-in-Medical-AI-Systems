@@ -10,6 +10,7 @@ results/
 weights/
 
 # Generated YOLO dataset staging areas
+data/dataset_cls/
 data/dataset_yolo/
 data/dataset_yolo_seg/
 data/dataset_yolo_Y0A/
