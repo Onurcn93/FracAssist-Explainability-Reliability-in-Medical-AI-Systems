@@ -16,7 +16,7 @@ annotated for classification, localization, and segmentation.
 
 | Phase | Model | Task | Primary Metric | Status |
 |-------|-------|------|----------------|--------|
-| 1 | ResNet-18 | Binary fracture classification | F1 (fractured class) | Complete |
+| 1 | ResNet-18 | Binary fracture classification | F1 (fractured class) | Pipeline verified — full E4 training pending |
 | 2 | YOLOv8s / YOLOv8s-seg / YOLOv8m | Localization & segmentation | mAP@0.5 | Complete |
 | 3 | CBM + Prototypes + Counterfactuals | XAI — three-pillar architecture | Task-specific | Pending |
 
@@ -55,7 +55,8 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 ├── xai/                      # XAI pillar implementations (Phase 3)
 ├── utils/
 │   ├── logger.py             # Experiment logging
-│   └── plot.py               # Training curves, metric plots
+│   ├── plot.py               # Training curves, metric plots
+│   └── gradcam.py            # GradCAM — compute_overlay / to_base64 / save
 ├── results/                  # Saved metrics and plots (gitignored)
 └── weights/                  # Saved model weights (gitignored)
 ```
@@ -295,11 +296,20 @@ All runs use ResNet-18 (ImageNet pretrained), full fine-tune, Adam, differential
 (backbone 1e-5 / head 1e-3), img_size=224, batch=32, seed=42.
 Post-training threshold sweep on val logged per experiment (`[sweep]` lines in log).
 
-### Results (Complete)
+### Results
 
-| Experiment | Threshold | F1 (Fractured) | Recall | Accuracy | AUC |
-|------------|-----------|----------------|--------|----------|-----|
-| E4e (cosine warmup) — **champion** | 0.425 | 65.81% | 64.66% | 88.75% | 0.8884 |
+Pipeline verified via `--debug` (1-epoch smoke test). Full E4 training pending.
+Results table will be populated after all 7 experiments complete.
+
+| Experiment | Threshold | F1 (Fractured) | Recall | Accuracy | AUC | Status |
+|------------|-----------|----------------|--------|----------|-----|--------|
+| E4a_m050 | — | — | — | — | — | Pending |
+| E4a_m075 | — | — | — | — | — | Pending |
+| E4i_d03  | — | — | — | — | — | Pending |
+| E4i_d05  | — | — | — | — | — | Pending |
+| E4e      | — | — | — | — | — | Pending — **champion candidate** |
+| E4h_g1   | — | — | — | — | — | Pending |
+| E4h_g2   | — | — | — | — | — | Pending |
 
 ---
 
