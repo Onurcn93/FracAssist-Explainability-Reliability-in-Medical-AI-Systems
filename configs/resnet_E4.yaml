@@ -1,0 +1,174 @@
+# configs/resnet_E4.yaml
+#
+# ResNet-18 fracture classification experiments (E4 series).
+#
+# Primary metric : Val F1 (fracture class, pos_label=0)
+# Architecture   : ResNet-18 ImageNet pretrained, full fine-tune
+# Optimizer      : Adam, differential LR (backbone 1e-5, head 1e-3)
+# Data           : FracAtlas binary split (Fractured / Non_fractured)
+#                  Fractured  → official train/valid/test.csv
+#                  Non-frac   → proportional 80/12/8, seed=42
+#
+# Prerequisite — build the dataset once:
+#   python data/prepare_classification.py
+#
+# Run individual experiments:
+#   python main.py --config configs/resnet_E4.yaml --task E4a_m050
+#   python main.py --config configs/resnet_E4.yaml --task E4a_m075
+#   python main.py --config configs/resnet_E4.yaml --task E4i_d03
+#   python main.py --config configs/resnet_E4.yaml --task E4i_d05
+#   python main.py --config configs/resnet_E4.yaml --task E4e
+#   python main.py --config configs/resnet_E4.yaml --task E4h_g1
+#   python main.py --config configs/resnet_E4.yaml --task E4h_g2
+#
+# Run all at once:
+#   python main.py --config configs/resnet_E4.yaml --task all
+
+
+# ── E4a: Class Weight Tuning ─────────────────────────────────────────────── #
+#
+# E3 baseline used multiplier=1.0 (natural imbalance ~4.7:1).
+# Result: Recall 77% but Precision only 46% → F1 = 57.7%.
+# Hypothesis: aggressive fracture weighting sacrifices precision.
+# Test gentler multipliers to rebalance F1.
+#
+# weight_mult=0.5  → ratio ~2.4:1  (gentle)
+# weight_mult=0.75 → ratio ~3.4:1  (moderate, between gentle and E3)
+
+E4a_m050:
+  experiment_id : "E4a_m050"
+  task          : "classify"
+  data_dir      : "data/dataset_cls"
+  epochs        : 20
+  batch_size    : 32
+  img_size      : 224
+  device        : "0"
+  dropout_p     : 0.0
+  weight_mult   : 0.5
+  loss          : "weighted_ce"
+  scheduler     : "plateau"
+  val_threshold : 0.5
+  plot          : true
+
+E4a_m075:
+  experiment_id : "E4a_m075"
+  task          : "classify"
+  data_dir      : "data/dataset_cls"
+  epochs        : 20
+  batch_size    : 32
+  img_size      : 224
+  device        : "0"
+  dropout_p     : 0.0
+  weight_mult   : 0.75
+  loss          : "weighted_ce"
+  scheduler     : "plateau"
+  val_threshold : 0.5
+  plot          : true
+
+
+# ── E4i: Dropout Regularisation ──────────────────────────────────────────── #
+#
+# E3 showed train loss ~0.08 vs val loss ~0.35 (gap = 0.27).
+# Model memorised 717 training fractures — poor generalisation.
+# Dropout forces redundant feature learning; success criterion: gap < 0.15.
+# Carries forward best weight_mult from E4a (default: 0.5).
+
+E4i_d03:
+  experiment_id : "E4i_d03"
+  task          : "classify"
+  data_dir      : "data/dataset_cls"
+  epochs        : 20
+  batch_size    : 32
+  img_size      : 224
+  device        : "0"
+  dropout_p     : 0.3
+  weight_mult   : 0.5
+  loss          : "weighted_ce"
+  scheduler     : "plateau"
+  val_threshold : 0.5
+  plot          : true
+
+E4i_d05:
+  experiment_id : "E4i_d05"
+  task          : "classify"
+  data_dir      : "data/dataset_cls"
+  epochs        : 20
+  batch_size    : 32
+  img_size      : 224
+  device        : "0"
+  dropout_p     : 0.5
+  weight_mult   : 0.5
+  loss          : "weighted_ce"
+  scheduler     : "plateau"
+  val_threshold : 0.5
+  plot          : true
+
+
+# ── E4e: Cosine Annealing + Warmup ───────────────────────────────────────── #
+#
+# ReduceLROnPlateau reacts only after stagnation — leaves LR high too long.
+# Linear warmup (epochs 1-3) stabilises head initialisation.
+# Cosine decay (epochs 4-30) gives smooth, predictable LR reduction.
+# Builds on best dropout from E4i (default: 0.3) + best weight from E4a (0.5).
+
+E4e:
+  experiment_id  : "E4e"
+  task           : "classify"
+  data_dir       : "data/dataset_cls"
+  epochs         : 30
+  batch_size     : 32
+  img_size       : 224
+  device         : "0"
+  dropout_p      : 0.3
+  weight_mult    : 0.5
+  loss           : "weighted_ce"
+  scheduler      : "cosine_warmup"
+  warmup_epochs  : 3
+  lr_backbone    : 1.0e-5
+  lr_head        : 1.0e-3
+  val_threshold  : 0.5
+  plot           : true
+
+
+# ── E4h: Focal Loss ───────────────────────────────────────────────────────── #
+#
+# Fixed class weights treat all fractures equally.
+# Focal Loss focuses training budget on hard mis-classified fractures.
+# FL(p_t) = -alpha_t * (1 - p_t)^gamma * log(p_t)
+# Class weights (alpha) still applied for base imbalance.
+# Builds on best weight + dropout from E4a/E4i.
+#
+# gamma=1 → mild focus (conservative, less instability risk)
+# gamma=2 → strong focus (Lin et al. 2017 paper default)
+
+E4h_g1:
+  experiment_id : "E4h_g1"
+  task          : "classify"
+  data_dir      : "data/dataset_cls"
+  epochs        : 20
+  batch_size    : 32
+  img_size      : 224
+  device        : "0"
+  dropout_p     : 0.3
+  weight_mult   : 0.5
+  loss          : "focal"
+  gamma         : 1.0
+  scheduler     : "plateau"
+  val_threshold : 0.5
+  plot          : true
+
+E4h_g2:
+  experiment_id : "E4h_g2"
+  task          : "classify"
+  data_dir      : "data/dataset_cls"
+  epochs        : 20
+  batch_size    : 32
+  img_size      : 224
+  device        : "0"
+  dropout_p     : 0.3
+  weight_mult   : 0.5
+  loss          : "focal"
+  gamma         : 2.0
+  scheduler     : "plateau"
+  val_threshold : 0.5
+  plot          : true

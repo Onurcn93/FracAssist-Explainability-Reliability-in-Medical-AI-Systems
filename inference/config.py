@@ -7,7 +7,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG = {
     # Weight paths — place files in repo_root/weights/
     "yolo_weights":  os.path.join(_ROOT, "weights", "Y1B_detect_best.pt"),
-    "resnet_weights": os.path.join(_ROOT, "weights", "resnet18_e4e.pth"),
+    "resnet_weights": os.path.join(_ROOT, "weights", "E4e_best.pth"),
 
     # YOLO inference — fixed from Y1B training
     "yolo_conf_threshold": 0.25,

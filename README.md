@@ -32,6 +32,7 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 /
 ├── main.py                   # Entry point — --config, --task, --seed, --debug, --no-plot
 ├── configs/                  # Experiment config files (YAML)
+│   ├── resnet_E4.yaml        # E4 classification experiments (E4a / E4i / E4e / E4h)
 │   ├── yolo_baseline.yaml    # Original Y0 runs (fractured-only, mixed optimizers)
 │   ├── yolo_Y0.yaml          # Three-way reproduction: Y0A / Y0B / Y0C
 │   ├── yolo_Y1.yaml          # Extended training: Y1A (patience=10) / Y1B (patience=50)
@@ -39,6 +40,8 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 │   ├── yolo_Y3.yaml          # Resolution ablation: imgsz=800, batch=8 (VRAM limit)
 │   └── yolo_Y4.yaml          # Capacity ablation: YOLOv8m (25.9M params)
 ├── data/                     # Data preparation scripts
+│   ├── prepare_classification.py  # Builds ImageFolder split dirs for ResNet
+│   └── prepare_yolo.py            # Builds YOLO detection / segmentation datasets
 ├── models/
 │   ├── classification/       # ResNet-18 experiments (E-series)
 │   └── yolo/                 # YOLO localization & segmentation (Y-series)
@@ -101,6 +104,19 @@ pip install -r requirements.txt
 ### 1. Prepare datasets
 
 ```bash
+# Classification (Phase 1) — build ImageFolder split dirs once
+python data/prepare_classification.py
+# Output: data/dataset_cls/train|val|test / Fractured|Non_fractured/
+# Fractured: official train/valid/test.csv splits
+# Non-fractured: proportional 80/12/8, seed=42
+```
+
+| Flag | Description |
+|------|-------------|
+| `--out_dir` | Custom output directory (default: `data/dataset_cls`) |
+| `--clean` | Wipe and rebuild from scratch |
+
+```bash
 # Y0A — paper stated splits (574 fractured only)
 python data/prepare_yolo.py --out_dir data/dataset_yolo_Y0A --clean
 python data/prepare_yolo.py --seg --out_dir data/dataset_yolo_seg_Y0A --clean
@@ -136,6 +152,20 @@ python main.py --config configs/yolo_Y0.yaml --task Y0A_localization --debug
 ### 3. Train
 
 ```bash
+# Classification (Phase 1)
+python main.py --config configs/resnet_E4.yaml --task E4a_m050
+python main.py --config configs/resnet_E4.yaml --task E4a_m075
+python main.py --config configs/resnet_E4.yaml --task E4i_d03
+python main.py --config configs/resnet_E4.yaml --task E4i_d05
+python main.py --config configs/resnet_E4.yaml --task E4e
+python main.py --config configs/resnet_E4.yaml --task E4h_g1
+python main.py --config configs/resnet_E4.yaml --task E4h_g2
+
+# All E4 experiments sequentially
+python main.py --config configs/resnet_E4.yaml --task all
+```
+
+```bash
 # Individual tasks
 python main.py --config configs/yolo_Y0.yaml --task Y0A_localization
 python main.py --config configs/yolo_Y0.yaml --task Y0A_segmentation
@@ -161,7 +191,34 @@ python models/yolo/evaluate.py \
 Use `--split val` during development (default). Use `--split test` only for
 final per-phase reporting.
 
-### Config format
+### Config format — classification
+
+```yaml
+E4e:
+  experiment_id  : "E4e"
+  task           : "classify"
+  data_dir       : "data/dataset_cls"
+  epochs         : 30
+  batch_size     : 32
+  img_size       : 224
+  device         : "0"
+  dropout_p      : 0.3           # 0.0 = no dropout
+  weight_mult    : 0.5           # 0.0 = flat, 1.0 = natural imbalance ratio
+  loss           : "weighted_ce" # "weighted_ce" or "focal"
+  gamma          : 1.0           # focal loss only (gamma=1 mild, gamma=2 strong)
+  scheduler      : "cosine_warmup" # "plateau" or "cosine_warmup"
+  warmup_epochs  : 3
+  lr_backbone    : 1.0e-5
+  lr_head        : 1.0e-3
+  val_threshold  : 0.5           # threshold used during training; sweep refines this
+  plot           : true
+```
+
+Post-training, each run logs an optimal threshold from a val sweep
+(`[sweep] Optimal threshold: X.XXX`). Update `inference/config.py` with
+that value when promoting an experiment to champion.
+
+### Config format — YOLO
 
 ```yaml
 Y0A_localization:
@@ -217,11 +274,32 @@ FracAtlas/
 
 ---
 
-## Phase 1 — Classification Results (Complete)
+## Phase 1 — Classification Results
 
-| Model | Threshold | F1 (Fractured) | Recall | Accuracy | AUC |
-|-------|-----------|----------------|--------|----------|-----|
-| ResNet-18 (E4e, cosine warmup) | 0.425 | 65.81% | 64.66% | 88.75% | 0.8884 |
+Baseline from E3 (Week 3–4, weighted CE multiplier=1.0):
+F1 = 57.7% | Recall = 77.0% | Precision = 46.1% | AUC = 0.857
+
+### E4 Experiment Plan
+
+| ID | Change vs previous | Key idea |
+|----|-------------------|----------|
+| E4a_m050 | weight_mult 1.0 → 0.5 | Reduce fracture over-emphasis; ratio ~2.4:1 |
+| E4a_m075 | weight_mult 1.0 → 0.75 | Moderate reduction; ratio ~3.4:1 |
+| E4i_d03 | +dropout=0.3 on E4a winner | Combat train/val loss gap (~0.27 in E3) |
+| E4i_d05 | +dropout=0.5 on E4a winner | Stronger regularisation |
+| E4e | +cosine warmup on E4a+E4i winner | Smoother LR convergence |
+| E4h_g1 | +focal loss γ=1 | Focus on hard mis-classified fractures |
+| E4h_g2 | +focal loss γ=2 | Stronger focusing (Lin et al. 2017 default) |
+
+All runs use ResNet-18 (ImageNet pretrained), full fine-tune, Adam, differential LR
+(backbone 1e-5 / head 1e-3), img_size=224, batch=32, seed=42.
+Post-training threshold sweep on val logged per experiment (`[sweep]` lines in log).
+
+### Results (Complete)
+
+| Experiment | Threshold | F1 (Fractured) | Recall | Accuracy | AUC |
+|------------|-----------|----------------|--------|----------|-----|
+| E4e (cosine warmup) — **champion** | 0.425 | 65.81% | 64.66% | 88.75% | 0.8884 |
 
 ---
 
@@ -329,7 +407,7 @@ A local web app for clinical decision support. Runs entirely offline; no data le
 ```bash
 # Weights required — place in weights/ before starting:
 #   Y1B_detect_best.pt     (required — YOLO detector)
-#   resnet18_e4e.pth       (optional — enables CLASSIFIER-LED path + GradCAM)
+#   E4e_best.pth           (optional — enables CLASSIFIER-LED path + GradCAM)
 
 python inference/app.py
 # → http://127.0.0.1:5000
@@ -362,7 +440,7 @@ YOLO-LED   CLASSIFIER-LED
 
 - **YOLO-LED**: YOLO fired a box → fracture probability = YOLO confidence. ResNet runs in parallel (if loaded) to produce GradCAM. Clinician can toggle between bounding-box and GradCAM overlays.
 - **CLASSIFIER-LED**: YOLO found no box → ResNet-18 classifies the full image. GradCAM generated on `layer4[-1]`. If ResNet weights are absent, defaults to Non-Fractured.
-- **YOLO-only mode**: Both paths work without ResNet; GradCAM overlay is unavailable until `resnet18_e4e.pth` is placed in `weights/`.
+- **YOLO-only mode**: Both paths work without ResNet; GradCAM overlay is unavailable until `E4e_best.pth` is placed in `weights/`.
 
 ### API
 

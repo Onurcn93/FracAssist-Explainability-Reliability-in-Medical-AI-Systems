@@ -35,6 +35,11 @@ def run_yolo(config: dict) -> None:
     run_training(config)
 
 
+def run_resnet(config: dict) -> None:
+    from models.classification.resnet import run_training
+    run_training(config)
+
+
 def set_global_seed(seed: int) -> None:
     import numpy as np
     import torch
@@ -113,6 +118,8 @@ def main():
         yolo_tasks = {"detect", "segment", "localization", "segmentation"}
         if config.get("task") in yolo_tasks or config.get("model_weights", "").startswith("yolo"):
             run_yolo(config)
+        elif config.get("task") == "classify":
+            run_resnet(config)
         else:
             print(f"[error] No training module found for config task '{config.get('task')}'")
             sys.exit(1)
