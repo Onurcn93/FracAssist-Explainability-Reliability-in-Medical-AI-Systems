@@ -15,6 +15,14 @@ import os
 
 import cv2
 import numpy as np
+
+
+def _imread(path: str) -> "np.ndarray | None":
+    """cv2.imread that works on Windows paths containing spaces or Unicode."""
+    buf = np.fromfile(path, dtype=np.uint8)
+    if buf.size == 0:
+        return None
+    return cv2.imdecode(buf, cv2.IMREAD_COLOR)
 import torch
 import torch.nn as nn
 from PIL import Image
@@ -175,7 +183,7 @@ def _encode_base64(img_bgr):
 
 def _image_to_base64(image_path):
     """Read an image file and return it as a base64 PNG string."""
-    img = cv2.imread(image_path)
+    img = _imread(image_path)
     if img is None:
         return None
     return _encode_base64(img)
@@ -183,7 +191,7 @@ def _image_to_base64(image_path):
 
 def _draw_bbox_base64(image_path, bbox, confidence):
     """Draw YOLO bounding box on the original image, return base64 PNG."""
-    img = cv2.imread(image_path)
+    img = _imread(image_path)
     if img is None:
         return None
     x1, y1, x2, y2 = [int(v) for v in bbox]

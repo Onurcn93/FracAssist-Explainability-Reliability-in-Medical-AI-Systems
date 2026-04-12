@@ -17,13 +17,16 @@ import tempfile
 from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 
-# Ensure inference/ is on path so config and predict import cleanly
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Ensure both inference/ and repo root are on path so all imports resolve
+_INFERENCE_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT     = os.path.dirname(_INFERENCE_DIR)
+sys.path.insert(0, _INFERENCE_DIR)
+sys.path.insert(0, _REPO_ROOT)
 
 from config import CONFIG
 from predict import load_models, predict as run_predict
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ROOT = _REPO_ROOT
 
 app = Flask(__name__, static_folder=_ROOT, static_url_path='')
 CORS(app)  # Required: index.html may be opened as file:// or cross-origin

@@ -38,6 +38,14 @@ import torch
 import torch.nn as nn
 
 
+def _imread(path: Union[str, Path]) -> "np.ndarray | None":
+    """cv2.imread that works on Windows paths containing spaces or Unicode."""
+    buf = np.fromfile(str(path), dtype=np.uint8)
+    if buf.size == 0:
+        return None
+    return cv2.imdecode(buf, cv2.IMREAD_COLOR)
+
+
 # ── Layer resolution ─────────────────────────────────────────────────────── #
 
 def _resolve_layer(model: nn.Module, layer_name: str) -> nn.Module:
@@ -167,7 +175,7 @@ def to_base64(
     Returns the data URI string directly consumable by <img src="...">.
     If image_path cannot be read, falls back to a pure heatmap at overlay_size.
     """
-    orig = cv2.imread(str(image_path))
+    orig = _imread(image_path)
     if orig is None:
         orig = np.zeros((overlay_size, overlay_size, 3), dtype=np.uint8)
     orig_resized = cv2.resize(orig, (overlay_size, overlay_size))
@@ -198,7 +206,7 @@ def save(
     Intended for offline evaluation and research plots — call after
     training or during test-set evaluation to produce explainability figures.
     """
-    orig = cv2.imread(str(image_path))
+    orig = _imread(image_path)
     if orig is None:
         raise FileNotFoundError(f"[gradcam] Cannot read image: {image_path}")
 
