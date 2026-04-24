@@ -8,7 +8,7 @@
 const API_URL = 'http://127.0.0.1:5000';
 
 // ─── State ────────────────────────────────────────────────────────────────
-let _resultData    = null;
+let _resultData     = null;
 let _currentOverlay = 'box'; // matches the default checked radio
 
 // ─── Tab switching ─────────────────────────────────────────────────────────
@@ -93,10 +93,8 @@ function handleFile(file) {
 function applyPrediction(data) {
     const isFrac = data.label === 'Fractured';
     const prob   = Math.round((data.fracture_probability || 0) * 100);
-    const conf   = data.mode === 'YOLO-LED' ? data.yolo_confidence : data.resnet_probability;
-    const confStr = conf != null ? conf.toFixed(2) : '—';
 
-    // Fracture Probability card
+    // ── Fracture Probability card ──────────────────────────────────────────
     const probVal = document.getElementById('prob-val');
     probVal.textContent = prob + '%';
     probVal.className   = 'card-value ' + (isFrac ? 'alert-red' : 'text-teal');
@@ -105,37 +103,56 @@ function applyPrediction(data) {
     probSub.textContent = isFrac ? 'HIGH RISK — FRACTURED' : 'LOW RISK — NON-FRACTURED';
     probSub.className   = 'card-subtitle ' + (isFrac ? 'alert-red' : 'text-teal');
 
-    // Model Confidence card
-    const confVal = document.getElementById('conf-val');
-    confVal.textContent = data.mode === 'YOLO-LED' ? `YOLO: ${confStr}` : `ResNet: ${confStr}`;
-    confVal.className   = 'card-value ' + (isFrac ? 'alert-red' : 'text-teal');
-
-    const confSub = document.getElementById('conf-sub');
-    if (data.mode === 'YOLO-LED' && data.resnet_probability) {
-        confSub.textContent = `ResNet: ${data.resnet_probability.toFixed(2)}`;
+    // ── YOLO model card ────────────────────────────────────────────────────
+    const yoloVal = document.getElementById('yolo-val');
+    const yoloSub = document.getElementById('yolo-sub');
+    if (data.yolo_confidence != null) {
+        yoloVal.textContent = data.yolo_confidence.toFixed(2);
+        yoloVal.className   = 'model-card-value alert-red';
+        yoloSub.textContent = 'BOX DETECTED';
     } else {
-        confSub.textContent = data.mode === 'YOLO-LED'
-            ? 'Primary: YOLO detector'
-            : 'Primary: ResNet-18 classifier';
+        yoloVal.textContent = '—';
+        yoloVal.className   = 'model-card-value text-teal';
+        yoloSub.textContent = 'NO DETECTION';
     }
 
-    // Body Part card
-    const bodyConf = data.body_part_confidence > 0
-        ? `${data.body_part || '—'}: ${(data.body_part_confidence * 100).toFixed(1)}%`
-        : (data.body_part || '—');
-    document.getElementById('body-val').textContent = bodyConf;
-    document.getElementById('body-sub').textContent = 'region classification';
+    // ── ResNet-18 model card ───────────────────────────────────────────────
+    const resnetVal = document.getElementById('resnet-val');
+    const resnetSub = document.getElementById('resnet-sub');
+    if (data.resnet_probability != null) {
+        const rp = data.resnet_probability;
+        resnetVal.textContent = rp.toFixed(2);
+        resnetVal.className   = 'model-card-value ' + (rp >= 0.375 ? 'alert-red' : 'text-teal');
+        resnetSub.textContent = (rp >= 0.375 ? 'FRAC' : 'NON-FRAC') + ' · thr 0.375';
+    } else {
+        resnetVal.textContent = '—';
+        resnetVal.className   = 'model-card-value';
+        resnetSub.textContent = 'not loaded';
+    }
 
-    // Status banner
+    // ── DenseNet-169 model card ────────────────────────────────────────────
+    const densenetVal = document.getElementById('densenet-val');
+    const densenetSub = document.getElementById('densenet-sub');
+    if (data.densenet_probability != null) {
+        const dp = data.densenet_probability;
+        densenetVal.textContent = dp.toFixed(2);
+        densenetVal.className   = 'model-card-value ' + (isFrac ? 'alert-red' : 'text-teal');
+        densenetSub.textContent = 'D2 output';
+    } else {
+        densenetVal.textContent = '—';
+        densenetVal.className   = 'model-card-value';
+        densenetSub.textContent = 'D2 training pending';
+    }
+
+    // ── Status banner ──────────────────────────────────────────────────────
     const banner = document.getElementById('status-banner');
     banner.className = 'status-banner ' + (isFrac ? 'status-fractured' : 'status-ok');
     document.getElementById('status-dot').className  = 'status-dot ' + (isFrac ? 'dot-red' : 'dot-teal');
     document.getElementById('status-text').textContent =
         data.mode === 'YOLO-LED' ? 'YOLO-LED DETECTION' : 'CLASSIFIER-LED';
     document.getElementById('status-model').textContent =
-        data.mode === 'YOLO-LED' ? 'Y1B + E4e' : 'E4e ResNet-18';
+        data.mode === 'YOLO-LED' ? 'Y1B + E4a' : 'E4a ResNet-18';
 
-    // Show result image with current overlay
     showState('result');
     _updateOverlay(_currentOverlay);
 }
@@ -156,7 +173,6 @@ function _updateOverlay(mode) {
             : '—';
         badge.textContent = `YOLO · Y1B · conf ${conf}`;
     } else {
-        // Requested overlay not available — fall back gracefully
         img.src = _resultData.gradcam_image || _resultData.xray_with_box || '';
         badge.textContent = mode === 'box' ? 'No YOLO detection' : 'GradCAM unavailable';
     }
@@ -164,27 +180,36 @@ function _updateOverlay(mode) {
 
 // ─── UI state helpers ──────────────────────────────────────────────────────
 function showState(state) {
-    // empty uses .image-placeholder (always visible unless hidden)
-    // loading + result use .img-overlay (absolute, sits on top)
     document.getElementById('state-empty').classList.toggle('hidden', state !== 'empty');
     document.getElementById('state-loading').classList.toggle('hidden', state !== 'loading');
     document.getElementById('state-result').classList.toggle('hidden', state !== 'result');
 }
 
 function resetMetrics() {
-    ['prob-val', 'conf-val', 'body-val'].forEach(id => {
-        const el = document.getElementById(id);
-        el.textContent = '—';
-        el.className   = 'card-value';
-    });
-    document.getElementById('prob-sub').textContent  = 'awaiting image';
-    document.getElementById('prob-sub').className    = 'card-subtitle';
-    document.getElementById('conf-sub').textContent  = 'YOLO / ResNet-18 score';
-    document.getElementById('body-sub').textContent  = 'region classification';
+    // Fracture probability card
+    const probVal = document.getElementById('prob-val');
+    probVal.textContent = '—';
+    probVal.className   = 'card-value';
+    const probSub = document.getElementById('prob-sub');
+    probSub.textContent = 'awaiting image';
+    probSub.className   = 'card-subtitle';
 
+    // Model cards
+    [
+        ['yolo-val',     'model-card-value', 'yolo-sub',     'detector'],
+        ['resnet-val',   'model-card-value', 'resnet-sub',   'classifier'],
+        ['densenet-val', 'model-card-value', 'densenet-sub', 'classifier'],
+    ].forEach(([valId, valClass, subId, subText]) => {
+        const v = document.getElementById(valId);
+        v.textContent = '—';
+        v.className   = valClass;
+        document.getElementById(subId).textContent = subText;
+    });
+
+    // Status banner
     const banner = document.getElementById('status-banner');
     banner.className = 'status-banner';
-    document.getElementById('status-dot').className  = 'status-dot';
+    document.getElementById('status-dot').className   = 'status-dot';
     document.getElementById('status-text').textContent = 'awaiting prediction';
     document.getElementById('status-model').textContent = '';
 }
@@ -193,7 +218,7 @@ function showError(msg) {
     showState('empty');
     const banner = document.getElementById('status-banner');
     banner.className = 'status-banner status-error';
-    document.getElementById('status-dot').className  = 'status-dot dot-amber';
+    document.getElementById('status-dot').className   = 'status-dot dot-amber';
     document.getElementById('status-text').textContent = 'ERROR';
     document.getElementById('status-model').textContent = msg;
 }

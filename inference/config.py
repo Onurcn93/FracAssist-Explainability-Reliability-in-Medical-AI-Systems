@@ -6,21 +6,25 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 CONFIG = {
     # Weight paths — place files in repo_root/weights/
-    "yolo_weights":  os.path.join(_ROOT, "weights", "Y1B_detect_best.pt"),
-    "resnet_weights": os.path.join(_ROOT, "weights", "E4e_best.pth"),
+    "yolo_weights":     os.path.join(_ROOT, "weights", "Y1B_detect_best.pt"),
+    "resnet_weights":   os.path.join(_ROOT, "weights", "E4a_m050_best.pth"),
+    "densenet_weights": os.path.join(_ROOT, "weights", "D2_best.pth"),
 
     # YOLO inference — fixed from Y1B training
     "yolo_conf_threshold": 0.25,
     "yolo_iou_threshold":  0.5,
     "yolo_imgsz":          600,
 
-    # ResNet-18 inference — fixed from E4e cosine warmup training
-    "resnet_threshold":  0.425,
+    # ResNet-18 inference — fixed from E4a_m050 (val threshold 0.375, optimal sweep)
+    "resnet_threshold":  0.375,
     "resnet_input_size": 224,
     "resnet_resize":     256,
 
+    # DenseNet-169 inference — threshold loaded from checkpoint (D2 post-training sweep)
+    "densenet_input_size": 224,
+
     # GradCAM
-    "gradcam_layer": "layer4",  # hooks model.layer4[-1]
+    "gradcam_layer": "layer4",  # hooks model.layer4[-1] on ResNet-18
 
     # Device: auto-upgrade to CUDA if available
     "device": "cuda" if torch.cuda.is_available() else "cpu",
