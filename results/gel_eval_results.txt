@@ -1,0 +1,67 @@
+GEL Evaluation Results
+Date: 2026-04-25
+Weights: E4a_m050_best.pth (ResNet-18), D1_best.pth (DenseNet-169)
+Dataset: FracAtlas — data/dataset_cls/{val,test}
+Device: cuda:0
+
+GEL Hyperparameters (inference/config.py GEL_CONFIG):
+  F1 anchor ResNet-18    : 0.658  (E4a_m050 val F1)
+  F1 anchor DenseNet-169 : 0.724  (D1 val F1)
+  BVG gate threshold (τ) : 0.35
+  OAM disagree limit (δ) : 0.40
+  OAM penalty factor (k) : 0.20
+
+================================================================================
+  Split: VAL  —  485 images  |  frac_idx=0
+================================================================================
+
+GEL Diagnostics:
+  BVG gate pass rate      : 16.3%  (τ = 0.35)
+  OAM ResNet-18 trigger   : 1.2%   (δ = 0.40)
+  OAM DenseNet-169 trigger: 1.2%   (δ = 0.40)
+  p_final range           : [0.000, 1.000]  mean=0.163  std=0.301
+
+Metrics (sweep-optimal thresholds for individual models):
+  ResNet-18    (thr=0.550 sweep)   F1=0.6536  Recall=0.6098  Prec=0.7042  Acc=0.8907  AUC=0.8832
+  DenseNet-169 (thr=0.175 sweep)   F1=0.7239  Recall=0.7195  Prec=0.7284  Acc=0.9072  AUC=0.8439
+  --------------------------------------------------------------------------
+  GEL  (thr=0.500 fixed)           F1=0.6800  Recall=0.6220  Prec=0.7500  Acc=0.9010  AUC=0.8939
+  GEL  (thr=0.450 sweep-opt)       F1=0.7013  Recall=0.6585  Prec=0.7500  Acc=0.9052  AUC=0.8939
+
+  Val-sweep optimal threshold: 0.450
+
+================================================================================
+  Split: TEST  —  332 images  |  frac_idx=0
+================================================================================
+
+GEL Diagnostics:
+  BVG gate pass rate      : 17.8%  (τ = 0.35)
+  OAM ResNet-18 trigger   : 2.1%   (δ = 0.40)
+  OAM DenseNet-169 trigger: 2.1%   (δ = 0.40)
+  p_final range           : [0.000, 1.000]  mean=0.165  std=0.294
+
+Metrics (sweep-optimal thresholds for individual models):
+  ResNet-18    (thr=0.225 sweep)   F1=0.6324  Recall=0.7049  Prec=0.5733  Acc=0.8494  AUC=0.8396
+  DenseNet-169 (thr=0.350 sweep)   F1=0.6838  Recall=0.6557  Prec=0.7143  Acc=0.8886  AUC=0.8467
+  --------------------------------------------------------------------------
+  GEL  (thr=0.500 fixed)           F1=0.6727  Recall=0.6066  Prec=0.7551  Acc=0.8916  AUC=0.8578
+  GEL  (thr=0.300 sweep-opt)       F1=0.6829  Recall=0.6885  Prec=0.6774  Acc=0.8825  AUC=0.8578
+  GEL  (thr=0.450 val-optimal)     F1=0.6607  Recall=0.6066  Prec=0.7255  Acc=0.8855  AUC=0.8578
+
+  Val-sweep optimal threshold: 0.300
+
+================================================================================
+  Summary
+================================================================================
+
+AUC comparison (GEL vs individual models):
+  Val  — GEL 0.8939 > ResNet-18 0.8832 > DenseNet-169 0.8439  [GEL best]
+  Test — GEL 0.8578 > DenseNet-169 0.8467 > ResNet-18 0.8396  [GEL best]
+
+F1 at val-optimal threshold (0.450) applied to test:
+  GEL 0.6607 vs DenseNet-169 0.6838 — GEL below best individual on test F1.
+  GEL at test-sweep-opt (0.300): F1=0.6829, essentially matching DenseNet-169.
+
+OAM note: disagreement trigger rate is low (1.2–2.1%), indicating ResNet-18 and
+  DenseNet-169 rarely diverge beyond δ=0.40 on this dataset. OAM functions as
+  a safety mechanism rather than a frequent corrective.

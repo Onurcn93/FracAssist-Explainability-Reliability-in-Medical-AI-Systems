@@ -34,6 +34,7 @@
                         <input type="file" id="file-input" accept=".jpg,.jpeg,.png" style="display:none">
                         <button class="btn" id="select-btn">Select Image</button>
                         <select class="btn model-select" id="model-select">
+                            <option value="gel">Gated Ensemble Logic (GEL)</option>
                             <option value="ensemble">Selective Cascade (YOLO → ResNet / DenseNet)</option>
                             <option value="yolo">YOLOv8s only</option>
                             <option value="resnet">ResNet-18 only</option>
@@ -205,6 +206,45 @@
                         <div class="config-sub">Auto-detected at server startup</div>
                     </div>
                     <span class="config-val" id="cfg-device">—</span>
+                </div>
+            </div>
+
+            <h2 class="panel-title config-section-gap">Gated Ensemble Logic (GEL)</h2>
+            <div class="config-list">
+                <div class="config-row">
+                    <div>
+                        <div class="config-label">ResNet-18 F1 Anchor</div>
+                        <div class="config-sub">E4a_m050 val F1 — performance weight in BVG &amp; PDWF</div>
+                    </div>
+                    <span class="config-val text-teal">0.658</span>
+                </div>
+                <div class="config-row">
+                    <div>
+                        <div class="config-label">DenseNet-169 F1 Anchor</div>
+                        <div class="config-sub">D1 val F1 — performance weight in BVG &amp; PDWF</div>
+                    </div>
+                    <span class="config-val text-teal">0.724</span>
+                </div>
+                <div class="config-row">
+                    <div>
+                        <div class="config-label">BVG Gate Threshold (τ)</div>
+                        <div class="config-sub">Classifier consensus below this suppresses YOLO bbox</div>
+                    </div>
+                    <span class="config-val">0.35</span>
+                </div>
+                <div class="config-row">
+                    <div>
+                        <div class="config-label">OAM Disagreement Limit (δ)</div>
+                        <div class="config-sub">Deviation from mean above this flags a model as outlier</div>
+                    </div>
+                    <span class="config-val">0.40</span>
+                </div>
+                <div class="config-row">
+                    <div>
+                        <div class="config-label">OAM Penalty Factor (k)</div>
+                        <div class="config-sub">Outlier RC multiplied by this before PDWF fusion</div>
+                    </div>
+                    <span class="config-val">0.20</span>
                 </div>
             </div>
         </section>

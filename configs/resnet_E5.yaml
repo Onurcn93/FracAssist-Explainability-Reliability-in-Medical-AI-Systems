@@ -1,0 +1,32 @@
+# configs/resnet_E5.yaml
+#
+# ResNet-18 E5 — CLAHE preprocessing ablation.
+#
+# Ablation question: Does local contrast enhancement (CLAHE) on training images
+# improve fracture recall without sacrificing precision?
+#
+# All settings identical to E4a_m050 (val champion):
+#   weight_mult=0.5, no dropout, plateau scheduler, 20 epochs.
+# Single change: use_clahe=true adds CLAHETransform to TRAIN pipeline only.
+# Val/test pipeline is unchanged → fair comparison against E4a_m050.
+#
+# Target: +1–2pp F1 over E4e baseline (63.6%) or match/beat E4a champion (65.8%).
+#
+# Run:
+#   python main.py --config configs/resnet_E5.yaml --task E5
+
+E5:
+  experiment_id : "E5"
+  task          : "classify"
+  data_dir      : "data/dataset_cls"
+  epochs        : 20
+  batch_size    : 32
+  img_size      : 224
+  device        : "0"
+  dropout_p     : 0.0
+  weight_mult   : 0.5
+  loss          : "weighted_ce"
+  scheduler     : "plateau"
+  val_threshold : 0.5
+  use_clahe     : true
+  plot          : true

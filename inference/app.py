@@ -73,7 +73,11 @@ def predict_endpoint():
             tmp_path = f.name
             file.save(tmp_path)
 
-        result = run_predict(tmp_path, CONFIG)
+        inference_mode = request.form.get("inference_mode", "ensemble")
+        if inference_mode not in {"ensemble", "yolo", "resnet", "gel"}:
+            inference_mode = "ensemble"
+
+        result = run_predict(tmp_path, CONFIG, inference_mode=inference_mode)
         return jsonify(result)
 
     except Exception as e:

@@ -12,6 +12,7 @@ Supported experiments
     E4i  — Dropout regularisation      (dropout_p)
     E4e  — Cosine annealing + warmup   (scheduler=cosine_warmup)
     E4h  — Focal Loss                  (loss=focal, gamma)
+    E5   — CLAHE preprocessing         (use_clahe=true, else identical to E4a)
 
 Config keys (from YAML)
 -----------------------
@@ -31,6 +32,7 @@ Config keys (from YAML)
     lr_backbone     float   backbone learning rate (default 1e-5)
     lr_head         float   head learning rate (default 1e-3)
     val_threshold   float   decision threshold used during checkpoint selection (default 0.5)
+    use_clahe       bool    CLAHE local contrast enhancement on train images only (default False)
     plot            bool    whether to save training curves
 
 Prerequisite
@@ -49,7 +51,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torchvision.models as tv_models
 import torchvision.transforms as transforms
-from PIL import ImageFile
+import cv2
+from PIL import Image, ImageFile
 from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
 from torch.utils.data import DataLoader
 from torchvision.datasets import ImageFolder
@@ -204,7 +207,24 @@ def _compute_class_weights(
 
 # ── Transforms ────────────────────────────────────────────────────── #
 
-def _get_transforms(img_size: int):
+class CLAHETransform:
+    """CLAHE local contrast enhancement for X-ray images. Train-only.
+
+    Converts to grayscale, applies CLAHE, returns PIL RGB so downstream
+    Grayscale(3ch) and normalisation remain identical to the non-CLAHE pipeline.
+    clip_limit=2.0 and tile_grid=(8,8) are the standard medical-imaging defaults.
+    """
+
+    def __init__(self, clip_limit: float = 2.0, tile_grid: tuple = (8, 8)):
+        self._clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid)
+
+    def __call__(self, img: Image.Image) -> Image.Image:
+        gray     = np.array(img.convert("L"), dtype=np.uint8)
+        enhanced = self._clahe.apply(gray)
+        return Image.fromarray(enhanced).convert("RGB")
+
+
+def _get_transforms(img_size: int, use_clahe: bool = False):
     """Return (train_tf, val_tf, tta_transforms_list)."""
     val_tf = transforms.Compose([
         transforms.Resize((img_size, img_size)),
@@ -213,15 +233,18 @@ def _get_transforms(img_size: int):
         transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
     ])
 
-    train_tf = transforms.Compose([
-        transforms.Resize((img_size, img_size)),
-        transforms.Grayscale(num_output_channels=3),
-        transforms.RandomHorizontalFlip(p=0.5),          # L/R flip — anatomically valid
-        transforms.RandomRotation(degrees=15),            # ±15° — simulates positioning
-        transforms.ColorJitter(brightness=0.2, contrast=0.2),  # scanner exposure variation
-        transforms.ToTensor(),
-        transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
-    ])
+    clahe_step = [CLAHETransform()] if use_clahe else []
+    train_tf = transforms.Compose(
+        clahe_step + [
+            transforms.Resize((img_size, img_size)),
+            transforms.Grayscale(num_output_channels=3),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomRotation(degrees=15),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2),
+            transforms.ToTensor(),
+            transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+        ]
+    )
 
     tta_tfs = [
         val_tf,   # original (no augmentation)
@@ -418,6 +441,7 @@ def run_training(config: dict) -> Path:
     lr_bb       = config.get("lr_backbone",   1e-5)
     lr_head     = config.get("lr_head",       1e-3)
     val_thresh  = config.get("val_threshold", 0.5)
+    use_clahe   = config.get("use_clahe",     False)
 
     # ── Device ───────────────────────────────────────────────────── #
     dev_str = str(config.get("device", "cpu"))
@@ -434,6 +458,7 @@ def run_training(config: dict) -> Path:
         + (f"(γ={gamma})" if loss_type == "focal" else "")
         + f" | w={weight_mult}"
         + (f" | drop={dropout_p}" if dropout_p > 0.0 else "")
+        + (" | CLAHE" if use_clahe else "")
         + f" | {sched_type}"
     )
 
@@ -465,7 +490,7 @@ def run_training(config: dict) -> Path:
         logger.close()
         return Path()
 
-    train_tf, val_tf, tta_tfs = _get_transforms(img_size)
+    train_tf, val_tf, tta_tfs = _get_transforms(img_size, use_clahe=use_clahe)
     train_ds = ImageFolder(root=str(data_dir / "train"), transform=train_tf)
     val_ds   = ImageFolder(root=str(data_dir / "val"),   transform=val_tf)
     frac_idx = train_ds.class_to_idx[FRAC_CLASS]   # always 0 (alphabetical)

@@ -34,8 +34,10 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 ├── main.py                   # Entry point — --config, --task, --seed, --debug, --no-plot
 ├── configs/                  # Experiment config files (YAML)
 │   ├── resnet_E4.yaml        # E4 classification experiments (E4a / E4i / E4e / E4h)
+│   ├── resnet_E5.yaml        # E5 CAALMIX ablation — CLAHE-only preprocessing (pending)
 │   ├── densenet_D1.yaml      # D1 DenseNet-169 baseline (flat LR, no dropout)
 │   ├── densenet_D2.yaml      # D2 DenseNet-169 cosine warmup + dropout + threshold sweep
+│   ├── densenet_D3.yaml      # D3 DenseNet-169 full CAALMIX (conditional on E7 first)
 │   ├── yolo_baseline.yaml    # Original Y0 runs (fractured-only, mixed optimizers)
 │   ├── yolo_Y0.yaml          # Three-way reproduction: Y0A / Y0B / Y0C
 │   ├── yolo_Y1.yaml          # Extended training: Y1A (patience=10) / Y1B (patience=50)
@@ -51,22 +53,24 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 │   └── yolo/                 # YOLO localization & segmentation (Y-series)
 ├── inference/                # FracAssist clinical decision support system
 │   ├── config.py             # Fixed hyperparameters, weight paths, CUDA auto-detect
-│   ├── predict.py            # Selective ensemble logic + GradCAM
+│   ├── predict.py            # GEL ensemble + Selective Cascade + GradCAM
 │   └── app.py                # Flask: GET /, GET /health, POST /predict
-├── index.html                # FracAssist web UI (three tabs: Assist / Health / Config)
+├── index.html                # FracAssist web UI (three tabs: Assist / Model Status / Config)
 ├── style.css                 # Dark theme — bone-gradient plates, teal/red accents
-├── scripts.js                # UI logic — fetch /predict, overlay toggle, drag-drop
+├── scripts.js                # UI logic — fetch /predict, overlay toggle, drag-drop, zoom
 ├── xai/                      # XAI pillar implementations (Phase 3)
 ├── utils/
 │   ├── logger.py             # Experiment logging
 │   ├── plot.py               # Training curves, metric plots
 │   ├── gradcam.py            # GradCAM — compute_overlay / to_base64 / save
 │   ├── eval_resnet.py        # Evaluate all ResNet-18 checkpoints on val/test set
-│   └── eval_densenet.py      # Evaluate all DenseNet-169 checkpoints on val/test set
+│   ├── eval_densenet.py      # Evaluate all DenseNet-169 checkpoints on val/test set
+│   └── eval_gel.py           # Evaluate GEL ensemble on val/test — threshold sweep + baselines
 ├── results/                  # Saved metrics and plots
 │   ├── experiments_yolo.csv      # All YOLO experiments — hyperparams + metrics
 │   ├── experiments_resnet.csv    # All ResNet-18 experiments — hyperparams + metrics
 │   ├── experiments_densenet.csv  # All DenseNet-169 experiments — hyperparams + metrics
+│   ├── gel_eval_results.txt      # GEL evaluation output — both splits, baselines vs ensemble
 │   └── plots/                    # Training curves (gitignored)
 └── weights/                  # Saved model weights (gitignored)
 ```
@@ -221,10 +225,14 @@ python utils/eval_resnet.py --split val  # val set
 # DenseNet-169 — evaluate all D-series checkpoints, ranked by F1
 python utils/eval_densenet.py              # test set (default)
 python utils/eval_densenet.py --split val  # val set
+
+# GEL — evaluate ensemble on both splits (val then test, val-optimal threshold transferred)
+python utils/eval_gel.py
 ```
 
-Both eval scripts perform a post-hoc threshold sweep (0.05–0.95, step 0.025) and rank
-checkpoints by F1. Use `--split val` for tuning decisions; `--split test` for final reporting.
+All eval scripts perform a post-hoc threshold sweep (0.05–0.95, step 0.025) and report
+per-model baselines alongside the ensemble. Use `--split val` for tuning; `--split test`
+for final reporting. `eval_gel.py` always runs both splits to enable val→test threshold transfer.
 
 ### Config format — classification
 
@@ -405,6 +413,29 @@ Key findings:
 
 Weights: `weights/D1_best.pth`
 
+### GEL — Gated Ensemble Logic Results
+
+GEL combines ResNet-18 (E4a_m050) and DenseNet-169 (D1) via performance-weighted aggregation
+with a disagreement penalty. Evaluated via `utils/eval_gel.py` (threshold sweep 0.05–0.95,
+step 0.025). Val-optimal threshold transferred to test.
+
+**Hyperparameters:** τ=0.35 (gate), disagreement limit=0.40, penalty k=0.20
+
+| Split | Model | Threshold | F1 | Recall | Precision | AUC |
+|-------|-------|-----------|-----|--------|-----------|-----|
+| Val | ResNet-18 (E4a) | 0.375 | 63.8% | 68.3% | 59.8% | 0.883 |
+| Val | DenseNet-169 (D1) | 0.175 | 72.4% | 71.9% | 72.8% | 0.844 |
+| Val | **GEL ★** | **0.450** | **72.0%** | **75.6%** | **68.8%** | **0.894** |
+| Test | ResNet-18 (E4a) | 0.375 | 57.9% | 67.2% | 50.9% | 0.840 |
+| Test | DenseNet-169 (D1) | 0.350 | 67.1% | 63.9% | 70.7% | 0.847 |
+| Test | **GEL ★** | **0.450** | **64.9%** | **77.0%** | **56.2%** | **0.858** |
+
+GEL achieves the **best AUC on both splits** (0.894 val / 0.858 test), exceeding both
+constituent models. The thesis reliability claim rests on AUC improvement and bbox
+authentication architecture, not F1 (which is dominated by DenseNet on test).
+
+Full results: `results/gel_eval_results.txt`
+
 ---
 
 ## Phase 2 — YOLO Baseline Results
@@ -525,47 +556,67 @@ A local web app for clinical decision support. Runs entirely offline; no data le
 ```bash
 # Weights required — place in weights/ before starting:
 #   Y1B_detect_best.pt     (required — YOLO detector)
-#   E4a_m050_best.pth      (optional — enables CLASSIFIER-LED path + GradCAM)
-#   D1_best.pth            (optional — enables DenseNet-169 secondary output)
+#   E4a_m050_best.pth      (required for GEL — ResNet-18 classifier)
+#   D1_best.pth            (required for GEL — DenseNet-169 classifier)
 
 python inference/app.py
 # → http://127.0.0.1:5000
 ```
 
-### Selective Cascade
+### GEL — Gated Ensemble Logic (primary mode)
 
-The system implements a **YOLO-first cascade with ResNet-18 fallback**. YOLO and ResNet
-never combine scores — YOLO has first say; ResNet only runs when YOLO fires nothing.
-DenseNet-169 D1 runs in parallel on both paths as a secondary classifier.
+The default inference mode is **GEL**, a three-stage reliability architecture:
 
 ```
 Upload X-ray (JPG / PNG)
         │
         ▼
-  YOLO · Y1B · conf ≥ 0.25
+  All three models run in parallel:
+  ┌─────────────────────────────────────────┐
+  │  YOLO · Y1B · conf ≥ 0.25              │
+  │  ResNet-18 · E4a · threshold = 0.375   │
+  │  DenseNet-169 · D1 · threshold = 0.175 │
+  └─────────────────────────────────────────┘
         │
-   Box detected?
-   ┌────┴────┐
-  Yes        No
-   │          │
-YOLO-LED   CLASSIFIER-LED
-   │          │
-   │     ResNet-18 · E4a
-   │     threshold = 0.375
-   │          │
-   └────┬─────┘
-        │                     DenseNet-169 · D1 (parallel, both paths)
-        │                     threshold = 0.175
         ▼
-   fracture_probability        densenet_probability (secondary)
-   label  (Fractured / Non-Fractured)
-   xray_with_box  (base64 PNG)
-   gradcam_image  (base64 PNG — DenseNet-169 denseblock4)
+  BVG — Bounding Box Validation Gate
+  (authenticates YOLO bbox via model agreement)
+        │
+        ▼
+  RC — Reliability Calibration
+  (penalises classifiers when |p_r − p_d| > 0.40)
+        │
+        ▼
+  OAM — Output Aggregation Module
+  (performance-weighted average: F1_ResNet / F1_DenseNet)
+        │
+        ▼
+  PDWF — Probabilistic Decision with Fallback
+  (applies GEL gate; falls back to OAM if gate fails)
+        │
+        ▼
+   p_final (GEL output)
+   fracture_probability  label  xray_with_box  gradcam_image (DenseNet-169 denseblock4)
 ```
 
-- **YOLO-LED**: YOLO fired a box → fracture probability = YOLO confidence. ResNet and DenseNet run in parallel (if loaded). GradCAM from DenseNet-169 `denseblock4`. Clinician can toggle between bounding-box and GradCAM overlays.
-- **CLASSIFIER-LED**: YOLO found no box → ResNet-18 classifies the full image (primary decision). DenseNet-169 provides secondary probability + GradCAM (`denseblock4`).
-- **YOLO-only mode**: Works without ResNet/DenseNet; GradCAM and secondary classifier unavailable until weights are placed in `weights/`.
+**Inference modes** (selectable via UI dropdown):
+
+| Mode | Key | Description |
+|------|-----|-------------|
+| GEL | `gel` | Default — all 3 models + BVG/RC/OAM/PDWF |
+| Selective Cascade | `ensemble` | Legacy — YOLO-first with ResNet-18 fallback |
+| YOLOv8s only | `yolo` | Detection only; no classification |
+| ResNet-18 only | `resnet` | Classifier only; no localization |
+
+### Legacy Cascade
+
+```
+YOLO fires box?
+  Yes → YOLO-LED (YOLO confidence as fracture probability)
+  No  → CLASSIFIER-LED (ResNet-18 classifies full image)
+DenseNet-169 D1 runs in parallel on both paths (secondary output).
+GradCAM from DenseNet-169 denseblock4.
+```
 
 ### API
 

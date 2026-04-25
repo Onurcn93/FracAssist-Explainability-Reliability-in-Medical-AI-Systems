@@ -37,3 +37,36 @@ CONFIG = {
     # Served static file
     "index_html": os.path.join(_ROOT, "index.html"),
 }
+
+# ---------------------------------------------------------------------------
+# GEL — Gated Ensemble Logic hyperparameters
+#
+# Performance anchors (F1): empirical val-sweep results, 2026-04-25.
+#   YOLO is intentionally excluded — detection mAP is not comparable to
+#   classification F1 and must not enter the PDWF weighted sum.
+#
+# BVG (Binary Verification Gate):
+#   G = (P_r·F1_r + P_d·F1_d) / (F1_r + F1_d)
+#   If G < gel_tau → gate fails → bbox suppressed (P_final still shown).
+#
+# OAM (Outlier-Aware Modification):
+#   If |P_i − μ| > gel_disagree_lim → RC_i_adj = RC_i × gel_penalty_k
+#
+# PDWF (Performance-Driven Weighted Fusion):
+#   P_final = Σ(P_i · RC_i_adj) / Σ RC_i_adj   [classifiers only]
+# ---------------------------------------------------------------------------
+
+GEL_CONFIG = {
+    # Performance anchors — update when champion weights change
+    "gel_f1_resnet":    0.658,   # E4a_m050 val F1
+    "gel_f1_densenet":  0.724,   # D1 val F1
+
+    # BVG gate threshold — below this, YOLO bbox is suppressed
+    "gel_tau":          0.35,
+
+    # OAM — disagreement limit and penalty factor
+    "gel_disagree_lim": 0.40,
+    "gel_penalty_k":    0.20,
+}
+
+CONFIG.update(GEL_CONFIG)

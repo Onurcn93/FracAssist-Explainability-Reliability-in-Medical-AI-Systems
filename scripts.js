@@ -91,6 +91,7 @@ function handleFile(file) {
 
     const formData = new FormData();
     formData.append('image', file);
+    formData.append('inference_mode', document.getElementById('model-select').value);
 
     fetch(`${API_URL}/predict`, { method: 'POST', body: formData })
         .then(res => res.json())
@@ -124,7 +125,16 @@ function applyPrediction(data) {
     if (data.yolo_confidence != null) {
         yoloVal.textContent = data.yolo_confidence.toFixed(2);
         yoloVal.className   = 'model-card-value alert-red';
-        yoloSub.textContent = 'BOX DETECTED';
+        // GEL: show whether bbox was authenticated by gate
+        if ((data.mode === 'GEL' || data.mode === 'GEL-DEGRADED') && data.gel_gate_passed === false) {
+            yoloSub.textContent = 'BOX DETECTED · Gate ✗';
+        } else {
+            yoloSub.textContent = 'BOX DETECTED';
+        }
+    } else if (data.mode === 'CLASSIFIER-ONLY') {
+        yoloVal.textContent = '—';
+        yoloVal.className   = 'model-card-value';
+        yoloSub.textContent = 'skipped';
     } else {
         yoloVal.textContent = '—';
         yoloVal.className   = 'model-card-value text-teal';
@@ -138,7 +148,12 @@ function applyPrediction(data) {
         const rp = data.resnet_probability;
         resnetVal.textContent = rp.toFixed(2);
         resnetVal.className   = 'model-card-value ' + (rp >= 0.375 ? 'alert-red' : 'text-teal');
-        resnetSub.textContent = (rp >= 0.375 ? 'FRAC' : 'NON-FRAC') + ' · thr 0.375';
+        const gelNote = (data.mode === 'GEL' || data.mode === 'GEL-DEGRADED') ? ' · GEL' : ' · thr 0.375';
+        resnetSub.textContent = (rp >= 0.375 ? 'FRAC' : 'NON-FRAC') + gelNote;
+    } else if (data.mode === 'YOLO-ONLY') {
+        resnetVal.textContent = '—';
+        resnetVal.className   = 'model-card-value';
+        resnetSub.textContent = 'skipped';
     } else {
         resnetVal.textContent = '—';
         resnetVal.className   = 'model-card-value';
@@ -152,7 +167,11 @@ function applyPrediction(data) {
         const dp = data.densenet_probability;
         densenetVal.textContent = dp.toFixed(2);
         densenetVal.className   = 'model-card-value ' + (isFrac ? 'alert-red' : 'text-teal');
-        densenetSub.textContent = 'D1 output';
+        densenetSub.textContent = (data.mode === 'GEL' || data.mode === 'GEL-DEGRADED') ? 'D1 · GEL' : 'D1 output';
+    } else if (data.mode === 'YOLO-ONLY') {
+        densenetVal.textContent = '—';
+        densenetVal.className   = 'model-card-value';
+        densenetSub.textContent = 'skipped';
     } else {
         densenetVal.textContent = '—';
         densenetVal.className   = 'model-card-value';
@@ -163,10 +182,14 @@ function applyPrediction(data) {
     const banner = document.getElementById('status-banner');
     banner.className = 'status-banner ' + (isFrac ? 'status-fractured' : 'status-ok');
     document.getElementById('status-dot').className  = 'status-dot ' + (isFrac ? 'dot-red' : 'dot-teal');
-    document.getElementById('status-text').textContent =
-        data.mode === 'YOLO-LED' ? 'YOLO-LED DETECTION' : 'CLASSIFIER-LED';
-    document.getElementById('status-model').textContent =
-        data.mode === 'YOLO-LED' ? 'Y1B + D1' : 'E4a ResNet-18';
+    const _modeLabels  = { 'YOLO-LED': 'YOLO-LED DETECTION', 'CLASSIFIER-LED': 'CLASSIFIER-LED',
+                           'YOLO-ONLY': 'YOLO ONLY',          'CLASSIFIER-ONLY': 'CLASSIFIER ONLY',
+                           'GEL': 'GEL ENSEMBLE',             'GEL-DEGRADED': 'GEL DEGRADED' };
+    const _modelLabels = { 'YOLO-LED': 'Y1B + D1',           'CLASSIFIER-LED': 'E4a ResNet-18',
+                           'YOLO-ONLY': 'Y1B',                'CLASSIFIER-ONLY': 'E4a + D1',
+                           'GEL': 'Y1B · E4a · D1',          'GEL-DEGRADED': 'partial models' };
+    document.getElementById('status-text').textContent  = _modeLabels[data.mode]  || data.mode;
+    document.getElementById('status-model').textContent = _modelLabels[data.mode] || '';
 
     showState('result');
     _updateOverlay(_currentOverlay);

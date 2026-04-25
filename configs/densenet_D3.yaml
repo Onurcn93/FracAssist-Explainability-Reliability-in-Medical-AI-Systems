@@ -1,0 +1,34 @@
+# configs/densenet_D3.yaml
+#
+# DenseNet-169 D3 — CLAHE preprocessing ablation.
+#
+# Parallel to ResNet-18 E5: tests whether CLAHE improves DenseNet-169 similarly.
+# CAALMIX novelty confirmed only if E5 and D3 both show ≥+2pp F1 vs their baselines.
+#
+# All settings identical to D1 (DenseNet champion):
+#   weight_mult=0.5, no dropout, plateau scheduler, flat LR 1e-4, 50 epochs.
+# Single change: use_clahe=true adds CLAHETransform to TRAIN pipeline only.
+# Val/test pipeline is unchanged → fair comparison against D1.
+#
+# Target: +1–2pp F1 over D1 (72.4% val).
+#
+# Run:
+#   python main.py --config configs/densenet_D3.yaml --task D3
+
+D3:
+  experiment_id : "D3"
+  task          : "classify_densenet"
+  data_dir      : "data/dataset_cls"
+  epochs        : 50
+  batch_size    : 32
+  img_size      : 224
+  device        : "0"
+  dropout_p     : 0.0
+  weight_mult   : 0.5
+  loss          : "weighted_ce"
+  scheduler     : "plateau"
+  lr_backbone   : 1.0e-4
+  lr_head       : 1.0e-4
+  val_threshold : 0.5
+  use_clahe     : true
+  plot          : true

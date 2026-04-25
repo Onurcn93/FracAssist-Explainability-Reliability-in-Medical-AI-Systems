@@ -296,6 +296,12 @@ body {
     min-width: 200px;
 }
 
+/* ── Action button visibility — silver border for Select Image + model select */
+.action-buttons .btn,
+.action-buttons .model-select {
+    border-color: #8899AA;
+}
+
 /* ── Image display overlay states (loading + result, absolute over placeholder) */
 .img-overlay {
     position: absolute;
@@ -567,8 +573,12 @@ body {
 
 /* ── Config tab ─────────────────────────────────────────────────────────── */
 .config-panel {
-    padding: 1.5rem 0;
+    padding: 1.5rem 1.5rem;
     overflow-y: auto;
+}
+
+.config-section-gap {
+    margin-top: 1.5rem;
 }
 
 .config-list {
