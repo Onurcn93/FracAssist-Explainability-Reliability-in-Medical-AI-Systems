@@ -1,21 +1,25 @@
 """
 utils/gradcam.py
 
-GradCAM (Gradient-weighted Class Activation Mapping) for ResNet-18.
+GradCAM (Gradient-weighted Class Activation Mapping) — model-agnostic.
 
 Public API
 ----------
     overlay = compute_overlay(model, tensor, image_bgr, frac_idx, device,
-                              layer_name="layer4", alpha=0.5)
+                              layer_name="features.denseblock4", alpha=0.5)
         Returns a BGR numpy uint8 array — original image blended with heatmap.
 
     b64 = to_base64(model, tensor, image_path, frac_idx, device,
-                    layer_name="layer4", alpha=0.5)
+                    layer_name="features.denseblock4", alpha=0.5)
         Returns a "data:image/png;base64,..." string ready for the frontend.
 
     save(model, tensor, image_path, frac_idx, device, out_path,
-         layer_name="layer4", alpha=0.5)
+         layer_name="features.denseblock4", alpha=0.5)
         Writes the overlay PNG to out_path (offline plotting / research).
+
+layer_name is a dot-separated path (e.g. "features.denseblock4" for DenseNet-169,
+"layer4" for ResNet-18). If the resolved module is a Sequential or ModuleList,
+the last child is hooked automatically.
 
 All three functions target the fracture class score directly so the heatmap
 always shows *why the model considers the image a fracture*, regardless of
@@ -76,7 +80,7 @@ def _compute_cam(
     """Internal: run one GradCAM forward/backward pass.
 
     Returns a (H, W) float32 numpy array in [0, 1] — the raw CAM map at
-    the spatial resolution of the target layer (7×7 for ResNet-18 layer4).
+    the spatial resolution of the target layer.
     Hooks are always removed in the finally block to prevent memory leaks.
     """
     activations: dict = {}
@@ -129,13 +133,13 @@ def compute_overlay(
     image_bgr:  np.ndarray,
     frac_idx:   int,
     device:     torch.device,
-    layer_name: str   = "layer4",
+    layer_name: str   = "features.denseblock4",
     alpha:      float = 0.5,
 ) -> np.ndarray:
     """Blend a GradCAM heatmap onto an existing BGR image array.
 
     Args:
-        model:      ResNet-18 with 2-class head (eval or train mode — handled internally).
+        model:      2-class classifier (eval or train mode — handled internally).
         tensor:     Preprocessed (1, 3, H, W) float tensor (val/test transforms).
         image_bgr:  Original image as BGR numpy uint8 array.
         frac_idx:   Integer index of the Fractured class (0 for FracAtlas ImageFolder).
@@ -163,7 +167,7 @@ def to_base64(
     image_path: Union[str, Path],
     frac_idx:   int,
     device:     torch.device,
-    layer_name: str   = "layer4",
+    layer_name: str   = "features.denseblock4",
     alpha:      float = 0.5,
     overlay_size: int = 224,
 ) -> str:
@@ -195,7 +199,7 @@ def save(
     frac_idx:   int,
     device:     torch.device,
     out_path:   Union[str, Path],
-    layer_name: str   = "layer4",
+    layer_name: str   = "features.denseblock4",
     alpha:      float = 0.5,
 ) -> None:
     """Compute GradCAM and save the overlay as a PNG file.

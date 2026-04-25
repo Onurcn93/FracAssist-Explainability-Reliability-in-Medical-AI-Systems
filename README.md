@@ -560,11 +560,11 @@ YOLO-LED   CLASSIFIER-LED
    fracture_probability        densenet_probability (secondary)
    label  (Fractured / Non-Fractured)
    xray_with_box  (base64 PNG)
-   gradcam_image  (base64 PNG — ResNet layer4[-1])
+   gradcam_image  (base64 PNG — DenseNet-169 denseblock4)
 ```
 
-- **YOLO-LED**: YOLO fired a box → fracture probability = YOLO confidence. ResNet and DenseNet run in parallel (if loaded). Clinician can toggle between bounding-box and GradCAM overlays.
-- **CLASSIFIER-LED**: YOLO found no box → ResNet-18 classifies the full image (primary decision). DenseNet-169 provides a secondary probability. GradCAM generated on ResNet `layer4[-1]`.
+- **YOLO-LED**: YOLO fired a box → fracture probability = YOLO confidence. ResNet and DenseNet run in parallel (if loaded). GradCAM from DenseNet-169 `denseblock4`. Clinician can toggle between bounding-box and GradCAM overlays.
+- **CLASSIFIER-LED**: YOLO found no box → ResNet-18 classifies the full image (primary decision). DenseNet-169 provides secondary probability + GradCAM (`denseblock4`).
 - **YOLO-only mode**: Works without ResNet/DenseNet; GradCAM and secondary classifier unavailable until weights are placed in `weights/`.
 
 ### API

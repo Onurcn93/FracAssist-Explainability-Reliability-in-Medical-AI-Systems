@@ -24,8 +24,8 @@ CONFIG = {
     "densenet_threshold":  0.175,
     "densenet_input_size": 224,
 
-    # GradCAM
-    "gradcam_layer": "layer4",  # hooks model.layer4[-1] on ResNet-18
+    # GradCAM — DenseNet-169 D1 (final dense block before global avg pool)
+    "gradcam_layer": "features.denseblock4",
 
     # Device: auto-upgrade to CUDA if available
     "device": "cuda" if torch.cuda.is_available() else "cpu",

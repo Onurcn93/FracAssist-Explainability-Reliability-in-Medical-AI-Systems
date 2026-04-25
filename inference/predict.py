@@ -241,7 +241,7 @@ def predict(image_path, config):
 
     ResNet-18 and DenseNet-169 both run in parallel when loaded.
     ResNet-18 drives the cascade decision; DenseNet-169 is a secondary output.
-    GradCAM generated on ResNet-18 when loaded.
+    GradCAM generated on DenseNet-169 D1 (features.denseblock4) — superior model.
     """
     result = {
         "mode":                  None,
@@ -284,17 +284,17 @@ def predict(image_path, config):
         if _resnet_loaded:
             _, resnet_prob = run_resnet(resnet_tensor, config)
             result["resnet_probability"] = resnet_prob
-            result["gradcam_image"] = gradcam_utils.to_base64(
-                _resnet_model, resnet_tensor, image_path,
-                _resnet_frac_idx, config["device"],
-                layer_name=config.get("gradcam_layer", "layer4"),
-            )
-        else:
-            result["gradcam_image"] = result["xray_with_box"]
 
         if _densenet_loaded:
             _, densenet_prob = run_densenet(densenet_tensor, config)
             result["densenet_probability"] = densenet_prob
+            result["gradcam_image"] = gradcam_utils.to_base64(
+                _densenet_model, densenet_tensor, image_path,
+                _densenet_frac_idx, config["device"],
+                layer_name=config.get("gradcam_layer", "features.denseblock4"),
+            )
+        else:
+            result["gradcam_image"] = result["xray_with_box"]
 
     else:
         # ----------------------------------------------------------------
@@ -307,17 +307,18 @@ def predict(image_path, config):
             result["label"]                = label
             result["resnet_probability"]   = resnet_prob
             result["fracture_probability"] = resnet_prob
-            result["gradcam_image"] = gradcam_utils.to_base64(
-                _resnet_model, resnet_tensor, image_path,
-                _resnet_frac_idx, config["device"],
-                layer_name=config.get("gradcam_layer", "layer4"),
-            )
         else:
-            result["label"]       = "Non-Fractured"
-            result["gradcam_image"] = _image_to_base64(image_path)
+            result["label"] = "Non-Fractured"
 
         if _densenet_loaded:
             _, densenet_prob = run_densenet(densenet_tensor, config)
             result["densenet_probability"] = densenet_prob
+            result["gradcam_image"] = gradcam_utils.to_base64(
+                _densenet_model, densenet_tensor, image_path,
+                _densenet_frac_idx, config["device"],
+                layer_name=config.get("gradcam_layer", "features.denseblock4"),
+            )
+        else:
+            result["gradcam_image"] = _image_to_base64(image_path)
 
     return result

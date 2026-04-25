@@ -166,7 +166,7 @@ function applyPrediction(data) {
     document.getElementById('status-text').textContent =
         data.mode === 'YOLO-LED' ? 'YOLO-LED DETECTION' : 'CLASSIFIER-LED';
     document.getElementById('status-model').textContent =
-        data.mode === 'YOLO-LED' ? 'Y1B + E4a' : 'E4a ResNet-18';
+        data.mode === 'YOLO-LED' ? 'Y1B + D1' : 'E4a ResNet-18';
 
     showState('result');
     _updateOverlay(_currentOverlay);
@@ -180,7 +180,7 @@ function _updateOverlay(mode) {
 
     if (mode === 'grad' && _resultData.gradcam_image) {
         img.src = _resultData.gradcam_image;
-        badge.textContent = 'GradCAM · ResNet-18 · layer4';
+        badge.textContent = 'GradCAM · DenseNet-169 · denseblock4';
     } else if (mode === 'box' && _resultData.xray_with_box) {
         img.src = _resultData.xray_with_box;
         const conf = _resultData.yolo_confidence != null

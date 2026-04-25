@@ -62,7 +62,7 @@
                     <!-- State: result -->
                     <div id="state-result" class="img-overlay hidden">
                         <img id="result-img" alt="Prediction result">
-                        <div class="img-badge" id="img-badge">GradCAM · ResNet-18 · layer4</div>
+                        <div class="img-badge" id="img-badge">GradCAM · DenseNet-169 · denseblock4</div>
                         <div class="zoom-controls">
                             <span class="zoom-label" id="zoom-label">100%</span>
                             <input type="range" class="zoom-slider" id="zoom-slider" min="100" max="140" value="100" step="1">
@@ -147,7 +147,7 @@
                     <div class="health-row"><span>YOLO detects box</span><span class="text-teal">YOLO-LED output</span></div>
                     <div class="health-row"><span>No box detected</span><span class="alert-amber">ResNet-18 classifier (primary)</span></div>
                     <div class="health-row"><span>DenseNet-169</span><span>secondary output (both paths)</span></div>
-                    <div class="health-row"><span>GradCAM target</span><span>ResNet-18 layer4[-1]</span></div>
+                    <div class="health-row"><span>GradCAM target</span><span>DenseNet-169 denseblock4</span></div>
                     <div class="health-row"><span>Dataset</span><span>FracAtlas · 4,083 X-rays</span></div>
                 </div>
             </div>
@@ -195,9 +195,9 @@
                 <div class="config-row">
                     <div>
                         <div class="config-label">GradCAM Hook Layer</div>
-                        <div class="config-sub">Final convolutional block of ResNet-18</div>
+                        <div class="config-sub">Final dense block of DenseNet-169 (before global avg pool)</div>
                     </div>
-                    <span class="config-val">layer4[-1]</span>
+                    <span class="config-val">denseblock4</span>
                 </div>
                 <div class="config-row">
                     <div>
