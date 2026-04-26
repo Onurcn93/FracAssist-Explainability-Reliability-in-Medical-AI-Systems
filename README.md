@@ -17,9 +17,9 @@ annotated for classification, localization, and segmentation.
 | Phase | Model | Task | Primary Metric | Status |
 |-------|-------|------|----------------|--------|
 | 1 | ResNet-18 | Binary fracture classification (E-series) | F1 (fractured class) | Complete |
-| 1 | ResNet-18 | CAALMIX augmentation ablation (E5/E6/E7) | F1 (fractured class) | Complete — E6 champion (68.9%) |
+| 1 | ResNet-18 | CAALMIX augmentation ablation (E5/E6/E7/E8) | F1 (fractured class) | Complete — E6 champion (68.9%); E8 isolates XRayAugMix |
 | 1 | DenseNet-169 | Binary fracture classification (D-series) | F1 (fractured class) | Complete — D1 champion (72.4%) |
-| 1 | DenseNet-169 | CAALMIX augmentation ablation (D3/D4/D5) | F1 (fractured class) | Pending |
+| 1 | DenseNet-169 | CAALMIX augmentation ablation (D3/D4/D5) | F1 (fractured class) | D3 done (CLAHE hurts −6.2pp); D4/D5 skipped |
 | 2 | YOLOv8s / YOLOv8s-seg / YOLOv8m | Localization & segmentation | mAP@0.5 | Complete |
 | 3 | CBM + Prototypes + Counterfactuals | XAI — three-pillar architecture | Task-specific | Pending |
 
@@ -39,11 +39,12 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 │   ├── resnet_E5.yaml        # E5 CAALMIX step 1 — CLAHE only (done, F1=66.7%)
 │   ├── resnet_E6.yaml        # E6 CAALMIX step 2 — +AlbumentationsDelta (done, F1=68.9% ★)
 │   ├── resnet_E7.yaml        # E7 CAALMIX step 3 — +XRayAugMix (done, F1=65.2%, regressed)
+│   ├── resnet_E8.yaml        # E8 XRayAugMix standalone — no CLAHE, no Albu (done, F1=63.6%, isolates XRayAugMix harm)
 │   ├── densenet_D1.yaml      # D1 DenseNet-169 baseline (flat LR, no dropout)
 │   ├── densenet_D2.yaml      # D2 DenseNet-169 cosine warmup + dropout (worse — D1 is champion)
-│   ├── densenet_D3.yaml      # D3 CAALMIX step 1 — CLAHE only (mirrors E5, pending)
-│   ├── densenet_D4.yaml      # D4 CAALMIX step 2 — +AlbumentationsDelta (mirrors E6, pending)
-│   ├── densenet_D5.yaml      # D5 CAALMIX step 3 — +XRayAugMix (mirrors E7, pending)
+│   ├── densenet_D3.yaml      # D3 CAALMIX step 1 — CLAHE only (done, F1=66.2%, −6.2pp vs D1 — CLAHE hurts DenseNet)
+│   ├── densenet_D4.yaml      # D4 CAALMIX step 2 — +AlbumentationsDelta (skipped — D3 regression unrecoverable)
+│   ├── densenet_D5.yaml      # D5 CAALMIX step 3 — +XRayAugMix (skipped — D3 regression unrecoverable)
 │   ├── yolo_baseline.yaml    # Original Y0 runs (fractured-only, mixed optimizers)
 │   ├── yolo_Y0.yaml          # Three-way reproduction: Y0A / Y0B / Y0C
 │   ├── yolo_Y1.yaml          # Extended training: Y1A (patience=10) / Y1B (patience=50)
@@ -207,6 +208,9 @@ python main.py --config configs/resnet_E4.yaml --task all
 python main.py --config configs/resnet_E5.yaml --task E5   # CLAHE only
 python main.py --config configs/resnet_E6.yaml --task E6   # +AlbumentationsDelta (champion)
 python main.py --config configs/resnet_E7.yaml --task E7   # +XRayAugMix
+
+# ResNet-18 isolation experiment
+python main.py --config configs/resnet_E8.yaml --task E8   # XRayAugMix standalone (no CLAHE, no Albu)
 ```
 
 ```bash
@@ -447,14 +451,15 @@ TTA tested and rejected on all experiments (consistent negative results, −1 to
 | E5 | +CLAHE | 66.7% | 62.2% | 71.8% | 0.875 | 0.475 | 26m39s | ep30 |
 | **E6 ★** | **+AlbumentationsDelta** | **68.9%** | **62.2%** | **77.3%** | **0.889** | **0.525** | **31m15s** | **ep30** |
 | E7 | +XRayAugMix | 65.2% | 54.9% | 80.4% | 0.878 | 0.625 | 67m48s | ep51 (early stop) |
+| E8 | XRayAugMix standalone | 63.6% | 59.8% | 68.1% | 0.869 | 0.500 | 40m30s | ep31 (early stop) |
 
 **E6 is the CAALMIX champion for ResNet-18** — +3.1pp F1 over E4a baseline, +2.2pp over CLAHE-only (E5).
 
 Key findings:
 - CLAHE (E5) provides a moderate +0.9pp gain. The primary gain comes from AlbumentationsDelta (E6, +2.2pp over E5).
-- XRayAugMix (E7) **regresses** −3.7pp vs E6. Over-augmentation hypothesis: CLAHE preprocessing plus CLAHE-vary op inside XRayAugMix create contradictory contrast signals; Beta(1,1) 50% mixing is too aggressive at ResNet-18 capacity.
-- E7 is a valid negative ablation result confirming E6 is the optimal stack for ResNet-18.
-- AUC peaks at E6 (0.889) — E7 also regresses on AUC.
+- XRayAugMix (E7) **regresses** −3.7pp vs E6. E8 (XRayAugMix standalone, no CLAHE, no Albu) confirms the regression is intrinsic to XRayAugMix — not a CLAHE conflict artifact. E8 scores −2.2pp vs E4a baseline, ruling out pipeline-order confounds.
+- E7 (65.2%) > E8 (63.6%): CLAHE+Albu context partially offsets XRayAugMix damage — geometric augmentation provides countervailing regularization.
+- AUC peaks at E6 (0.889). XRayAugMix regresses AUC in both E7 and E8.
 
 ---
 
@@ -476,9 +481,9 @@ DenseNet-169 (ImageNet pretrained), full fine-tune, Adam. Same ImageFolder split
 |-------|------------|-----------|-----|--------|-----------|-----|-----|--------|
 | Val | **D1 ★** | **0.175** | **72.4%** | **72.0%** | **72.8%** | **90.7%** | **0.844** | Done |
 | Val | D2 | 0.875 | 63.1% | 50.0% | 85.4% | — | 0.854 | Done |
-| Val | D3 | — | — | — | — | — | — | Pending |
-| Val | D4 | — | — | — | — | — | — | Pending |
-| Val | D5 | — | — | — | — | — | — | Pending |
+| Val | D3 | 0.500 | 66.2% | 59.8% | 74.2% | — | 86.1% | Done — CLAHE hurts (−6.2pp vs D1) |
+| Val | D4 | — | — | — | — | — | — | Skipped — D3 regression unrecoverable |
+| Val | D5 | — | — | — | — | — | — | Skipped — D3 regression unrecoverable |
 | Test | D1 ★ | 0.350 | 68.4% | 65.6% | 71.4% | 88.9% | 0.847 | Done |
 | Test | D2 | 0.075 | 58.7% | 63.9% | 54.2% | 83.4% | 0.852 | Done |
 
@@ -489,7 +494,8 @@ Key findings:
 - D2's cosine warmup + dropout=0.3 **hurts** DenseNet: DenseNet's dense connections already act as implicit regularisation; additional dropout collapses threshold stability and destabilises recall. D1's flat LR clean baseline is strictly better.
 - D1 best checkpoint at epoch 13; model then overfits (train loss → 0.01, val loss → 0.5+). Early stopping with patience=15 is applied for D3/D4/D5.
 - TTA hurts D1 (−3.95pp on val) — all DenseNet inference uses single forward pass.
-- D3/D4/D5 run sequentially after E7 confirmed E6-equivalent is the expected DenseNet CAALMIX champion.
+- D3 (CLAHE only) **regresses −6.2pp** vs D1 (66.2% vs 72.4%). DenseNet's dense connections already propagate low-level contrast features across all layers — CLAHE disrupts the learned input distribution without adding discriminative information. D4/D5 skipped; −6pp is unrecoverable by adding augmentation.
+- **CAALMIX is architecture-selective:** CLAHE+Albu helps ResNet-18 (+3.1pp, E6) but hurts DenseNet-169 (−6.2pp, D3). This is the primary CAALMIX empirical finding.
 
 Weights: `weights/D1_best.pth`
 

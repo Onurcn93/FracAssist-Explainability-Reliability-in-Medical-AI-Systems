@@ -1,0 +1,36 @@
+# configs/resnet_E8.yaml
+#
+# ResNet-18 E8 -- XRayAugMix standalone (no CLAHE, no Albumentations).
+#
+# Ablation question: Does XRayAugMix hurt because of the CLAHE conflict
+# (preprocessing CLAHE + CLAHE-vary op = contradictory contrast signals),
+# or does it hurt regardless of context?
+#
+# E7 applied XRayAugMix on top of CLAHE+Albu (E6), making it impossible
+# to isolate XRayAugMix's individual effect. E8 tests it in isolation:
+# no preprocessing, no other augmentation -- just XRayAugMix vs baseline.
+#
+# Expected outcomes:
+#   E8 < E4a (0.6581): XRayAugMix hurts regardless of context.
+#   E8 ≈ E4a         : XRayAugMix is neutral standalone.
+#   E8 > E4a         : XRayAugMix helps alone; CLAHE conflict caused E7 regression.
+#
+# Run:
+#   python main.py --config configs/resnet_E8.yaml --task E8
+
+E8:
+  experiment_id : "E8"
+  task          : "classify"
+  data_dir      : "data/dataset_cls"
+  epochs        : 100
+  batch_size    : 32
+  img_size      : 224
+  device        : "0"
+  dropout_p     : 0.0
+  weight_mult   : 0.5
+  loss          : "weighted_ce"
+  scheduler     : "plateau"
+  val_threshold : 0.5
+  use_augmix          : true
+  early_stop_patience : 15
+  plot                : true
