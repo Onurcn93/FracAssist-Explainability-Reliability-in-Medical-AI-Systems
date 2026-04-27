@@ -20,6 +20,7 @@ annotated for classification, localization, and segmentation.
 | 1 | ResNet-18 | CAALMIX augmentation ablation (E5/E6/E7/E8) | F1 (fractured class) | Complete — E6 champion (68.9%); E8 isolates XRayAugMix |
 | 1 | DenseNet-169 | Binary fracture classification (D-series) | F1 (fractured class) | Complete — D1 champion (72.4%) |
 | 1 | DenseNet-169 | CAALMIX augmentation ablation (D3/D4/D5) | F1 (fractured class) | D3 done (CLAHE hurts −6.2pp); D4/D5 skipped |
+| 1 | EfficientNet-B3 | Binary fracture classification (F-series) | F1 (fractured class) | F1 baseline — pending training |
 | 2 | YOLOv8s / YOLOv8s-seg / YOLOv8m | Localization & segmentation | mAP@0.5 | Complete |
 | 3 | CBM + Prototypes + Counterfactuals | XAI — three-pillar architecture | Task-specific | Pending |
 
@@ -45,6 +46,7 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 │   ├── densenet_D3.yaml      # D3 CAALMIX step 1 — CLAHE only (done, F1=66.2%, −6.2pp vs D1 — CLAHE hurts DenseNet)
 │   ├── densenet_D4.yaml      # D4 CAALMIX step 2 — +AlbumentationsDelta (skipped — D3 regression unrecoverable)
 │   ├── densenet_D5.yaml      # D5 CAALMIX step 3 — +XRayAugMix (skipped — D3 regression unrecoverable)
+│   ├── efficientnet_F1.yaml  # F1 EfficientNet-B3 baseline (compound scaling, plateau scheduler)
 │   ├── yolo_baseline.yaml    # Original Y0 runs (fractured-only, mixed optimizers)
 │   ├── yolo_Y0.yaml          # Three-way reproduction: Y0A / Y0B / Y0C
 │   ├── yolo_Y1.yaml          # Extended training: Y1A (patience=10) / Y1B (patience=50)
@@ -56,7 +58,7 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 │   ├── prepare_classification.py  # Builds ImageFolder split dirs for ResNet/DenseNet
 │   └── prepare_yolo.py            # Builds YOLO detection / segmentation datasets
 ├── models/
-│   ├── classification/       # ResNet-18 (E-series) and DenseNet-169 (D-series)
+│   ├── classification/       # ResNet-18 (E-series), DenseNet-169 (D-series), EfficientNet-B3 (F-series)
 │   └── yolo/                 # YOLO localization & segmentation (Y-series)
 ├── inference/                # FracAssist clinical decision support system
 │   ├── config.py             # Fixed hyperparameters, weight paths, CUDA auto-detect
@@ -73,6 +75,7 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 │   ├── augmentations.py      # CAALMIX augmentation blocks — AlbumentationsDelta, XRayAugMix
 │   ├── eval_resnet.py        # Evaluate all ResNet-18 checkpoints on val/test set
 │   ├── eval_densenet.py      # Evaluate all DenseNet-169 checkpoints on val/test set
+│   ├── eval_efficientnet.py  # Evaluate all EfficientNet-B3 checkpoints on val/test set
 │   └── eval_gel.py           # Evaluate GEL ensemble on val/test — threshold sweep + baselines
 ├── results/                  # Saved metrics and plots
 │   ├── experiments_yolo.csv      # All YOLO experiments — hyperparams + metrics
@@ -105,6 +108,7 @@ pip install -r requirements.txt
 | YOLOv8m-seg | Fracture segmentation — capacity ablation | 2 |
 | ResNet-18 | Binary classification (E-series) | 1 |
 | DenseNet-169 | Binary classification (D-series) | 1 |
+| EfficientNet-B3 | Binary classification (F-series) — compound scaling | 1 |
 | CBM / Prototypes / Counterfactuals | XAI explainability | 3 |
 
 ---
@@ -119,7 +123,7 @@ pip install -r requirements.txt
 | `--debug` | flag | Override epochs=1 — tests pipeline without full training |
 | `--no-plot` | flag | Disable plot generation |
 
-> **Note:** `--weights` and `--split` are arguments to `utils/eval_resnet.py` and `utils/eval_densenet.py`, not `main.py`.
+> **Note:** `--split` is an argument to `utils/eval_resnet.py`, `utils/eval_densenet.py`, and `utils/eval_efficientnet.py`, not `main.py`.
 
 ---
 
@@ -214,6 +218,11 @@ python main.py --config configs/resnet_E8.yaml --task E8   # XRayAugMix standalo
 ```
 
 ```bash
+# EfficientNet-B3 (F-series)
+python main.py --config configs/efficientnet_F1.yaml --task F1   # compound scaling baseline
+```
+
+```bash
 # YOLO
 python main.py --config configs/yolo_Y0.yaml --task Y0A_localization
 python main.py --config configs/yolo_Y0.yaml --task Y0B_localization
@@ -238,6 +247,10 @@ python utils/eval_resnet.py --split val  # val set
 # DenseNet-169 — evaluate all D-series checkpoints, ranked by F1
 python utils/eval_densenet.py              # test set (default)
 python utils/eval_densenet.py --split val  # val set
+
+# EfficientNet-B3 — evaluate all F-series checkpoints, ranked by F1
+python utils/eval_efficientnet.py              # test set (default)
+python utils/eval_efficientnet.py --split val  # val set
 
 # GEL — evaluate ensemble on both splits (val then test, val-optimal threshold transferred)
 python utils/eval_gel.py
@@ -299,6 +312,34 @@ E6:
 
 Post-training, each run performs a val-set threshold sweep (0.05–0.95, step 0.025).
 The optimal threshold is saved directly into the checkpoint (`val_threshold` key).
+
+### Config format — EfficientNet-B3
+
+Same structure as DenseNet-169. Key differences: `task: classify_efficientnet`, backbone uses differential LR (strong ImageNet pretraining → lower backbone LR).
+
+```yaml
+F1:
+  experiment_id       : "F1"
+  task                : "classify_efficientnet"   # routes to models/classification/efficientnet.py
+  data_dir            : "data/dataset_cls"
+  epochs              : 50
+  batch_size          : 32
+  img_size            : 224
+  device              : "0"
+  dropout_p           : 0.0
+  weight_mult         : 0.5
+  loss                : "weighted_ce"
+  scheduler           : "plateau"
+  lr_backbone         : 1.0e-5    # low — compound-scaled backbone well-pretrained
+  lr_head             : 1.0e-3    # high — head re-initialised for binary task
+  val_threshold       : 0.5
+  early_stop_patience : 15
+  plot                : true
+```
+
+After training, update `inference/config.py`:
+- `"efficientnet_threshold"` → val_threshold from checkpoint
+- `"gel_f1_efficientnet"` → val F1 from `eval_efficientnet.py --split val`
 
 ### Config format — DenseNet-169
 
@@ -503,9 +544,10 @@ Weights: `weights/D1_best.pth`
 
 ### GEL — Gated Ensemble Logic Results
 
-GEL combines ResNet-18 (E4a_m050) and DenseNet-169 (D1) via performance-weighted aggregation
-with a disagreement penalty. Evaluated via `utils/eval_gel.py` (threshold sweep 0.05–0.95,
-step 0.025). Val-optimal threshold transferred to test.
+GEL combines ResNet-18 (E4a_m050), DenseNet-169 (D1), and EfficientNet-B3 (F1, pending) via
+performance-weighted aggregation with a disagreement penalty. The implementation adapts
+automatically to 2 or 3 loaded classifiers. Evaluated via `utils/eval_gel.py` (threshold
+sweep 0.05–0.95, step 0.025). Val-optimal threshold transferred to test.
 
 **Hyperparameters:** τ=0.35 (BVG gate), disagreement limit=0.40, penalty k=0.20
 
@@ -646,6 +688,7 @@ A local web app for clinical decision support. Runs entirely offline; no data le
 #   Y1B_detect_best.pt     (required — YOLO detector)
 #   E4a_m050_best.pth      (required for GEL — ResNet-18 classifier)
 #   D1_best.pth            (required for GEL — DenseNet-169 classifier)
+#   F1_best.pth            (optional — EfficientNet-B3 classifier, GEL adapts if absent)
 
 python inference/app.py
 # → http://127.0.0.1:5000
@@ -659,24 +702,25 @@ The default inference mode is **GEL**, a three-stage reliability architecture:
 Upload X-ray (JPG / PNG)
         │
         ▼
-  All three models run in parallel:
-  ┌─────────────────────────────────────────┐
-  │  YOLO · Y1B · conf ≥ 0.25              │
-  │  ResNet-18 · E4a · threshold = 0.375   │
-  │  DenseNet-169 · D1 · threshold = 0.175 │
-  └─────────────────────────────────────────┘
+  All models run in parallel:
+  ┌──────────────────────────────────────────────────────┐
+  │  YOLO · Y1B · conf ≥ 0.25                           │
+  │  ResNet-18 · E4a · threshold = 0.375                │
+  │  DenseNet-169 · D1 · threshold = 0.175              │
+  │  EfficientNet-B3 · F1 · threshold = TBD (optional)  │
+  └──────────────────────────────────────────────────────┘
         │
         ▼
   BVG — Bounding Box Validation Gate
-  (authenticates YOLO bbox via model agreement)
+  (authenticates YOLO bbox via classifier consensus)
         │
         ▼
   OAM — Outlier-Aware Modification
-  (penalises classifier i when |p_i − μ| > 0.40, μ = mean of classifiers)
+  (penalises classifier i when |p_i − μ| > 0.40, μ = mean of loaded classifiers)
         │
         ▼
   PDWF — Performance-weighted Decision Fusion
-  (F1-weighted average of ResNet-18 + DenseNet-169)
+  (F1-weighted average of all loaded classifiers — adapts to 2 or 3)
         │
         ▼
    p_final (GEL output)

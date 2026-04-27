@@ -1,0 +1,49 @@
+# configs/efficientnet_F1.yaml
+#
+# EfficientNet-B3 F1 — Baseline experiment.
+#
+# Primary metric : Val F1 (fracture class, pos_label=0)
+# Architecture   : EfficientNet-B3 ImageNet pretrained, full fine-tune
+#                  Compound scaling: depth × width × resolution (φ=1.2 for B3)
+#                  Head: classifier → Linear(1536→2)  [no dropout baseline]
+# Optimizer      : Adam, differential LR (backbone 1e-5, head 1e-3)
+#                  Backbone LR low — B3 features are strong ImageNet pretrained.
+#                  Head LR high — randomly re-initialised for binary task.
+# Scheduler      : ReduceLROnPlateau (mirrors D1 / E4a baseline)
+# Data           : FracAtlas binary split — shared with ResNet-18 / DenseNet-169 (seed=42)
+#                  Fractured  → official train/valid/test.csv
+#                  Non-frac   → proportional 80/12/8, seed=42
+#
+# Prerequisite — build the dataset once (shared with other classifiers):
+#   python data/prepare_classification.py
+#
+# Run:
+#   python main.py --config configs/efficientnet_F1.yaml --task F1
+#
+# Decision gate:
+#   If F1 < 60% → check overfitting (B3 12M params on ~700 images).
+#   If F1 ≥ 60% → update gel_f1_efficientnet in inference/config.py and proceed to F2.
+#   If F1 > DenseNet D1 (72.39%) → compound scaling outperforms dense connectivity on this dataset.
+#
+# After training: update inference/config.py
+#   "efficientnet_weights":    "weights/F1_best.pth"
+#   "efficientnet_threshold":  <val_threshold from checkpoint>
+#   "gel_f1_efficientnet":     <val F1 from sweep>
+
+F1:
+  experiment_id       : "F1"
+  task                : "classify_efficientnet"
+  data_dir            : "data/dataset_cls"
+  epochs              : 50
+  batch_size          : 32
+  img_size            : 224
+  device              : "0"
+  dropout_p           : 0.0
+  weight_mult         : 0.5
+  loss                : "weighted_ce"
+  scheduler           : "plateau"
+  lr_backbone         : 1.0e-5
+  lr_head             : 1.0e-3
+  val_threshold       : 0.5
+  early_stop_patience : 15
+  plot                : true

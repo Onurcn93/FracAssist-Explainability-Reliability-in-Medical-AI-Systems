@@ -2,16 +2,16 @@
 inference/predict.py — FracAssist inference module.
 
 Primary mode: GEL (Gated Ensemble Logic)
-  All three models run in parallel.
+  All four models run in parallel (YOLO + ResNet-18 + DenseNet-169 + EfficientNet-B3).
   BVG authenticates the YOLO bbox via classifier consensus.
-  OAM penalises an outlier classifier when |p_i − μ| > δ (deviation from mean).
-  PDWF fuses ResNet-18 + DenseNet-169 with F1-performance weights.
+  OAM penalises an outlier classifier when |p_i - mu| > delta (deviation from mean).
+  PDWF fuses loaded classifiers with F1-performance weights.
+  GEL adapts to 2 or 3 loaded classifiers automatically.
   GradCAM generated from DenseNet-169 denseblock4.
 
-Additional modes: "yolo" (detector only), "resnet" (classifiers only, no YOLO).
+Additional modes: "yolo" (detector only), "resnet" (all classifiers, no YOLO).
 
-ResNet-18 / DenseNet-169 weights are optional — the module degrades gracefully if
-checkpoints are absent.
+Classifier weights are optional — the module degrades gracefully if checkpoints are absent.
 """
 
 import os
@@ -50,17 +50,23 @@ _densenet_loaded    = False
 _densenet_frac_idx  = 0
 _densenet_threshold = 0.175  # D1 val-sweep optimal; overridden from config at load time
 
+_efficientnet_model     = None
+_efficientnet_loaded    = False
+_efficientnet_frac_idx  = 0
+_efficientnet_threshold = 0.5   # placeholder; overridden from checkpoint at load time
+
 
 # ---------------------------------------------------------------------------
 # Model loading
 # ---------------------------------------------------------------------------
 
 def load_models(config):
-    """Load YOLO, ResNet-18, and DenseNet-169 (latter two optional/graceful).
+    """Load YOLO, ResNet-18, DenseNet-169, and EfficientNet-B3 (classifiers optional/graceful).
     Called once at app startup. Raises FileNotFoundError if YOLO weights missing."""
     global _yolo_model
     global _resnet_model, _resnet_loaded, _resnet_frac_idx, _resnet_threshold
     global _densenet_model, _densenet_loaded, _densenet_frac_idx, _densenet_threshold
+    global _efficientnet_model, _efficientnet_loaded, _efficientnet_frac_idx, _efficientnet_threshold
 
     device = config["device"]
 
@@ -134,7 +140,40 @@ def load_models(config):
         print(f"[INFO] DenseNet-169 weights not found — will show as pending in UI.")
         _densenet_loaded = False
 
-    return _yolo_model, _resnet_model, _densenet_model
+    # --- EfficientNet-B3 (optional — F1) ---
+    efficientnet_path = config.get("efficientnet_weights", "")
+    if efficientnet_path and os.path.exists(efficientnet_path):
+        ckpt = torch.load(efficientnet_path, map_location=device, weights_only=False)
+        if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
+            state                   = ckpt["model_state_dict"]
+            _efficientnet_frac_idx  = ckpt.get("frac_idx", 0)
+            _efficientnet_threshold = ckpt.get("val_threshold", config.get("efficientnet_threshold", 0.5))
+        else:
+            state                   = ckpt
+            _efficientnet_frac_idx  = 0
+            _efficientnet_threshold = config.get("efficientnet_threshold", 0.5)
+
+        # Detect dropout: Sequential(Dropout, Linear) → "classifier.1.weight"
+        has_dropout = "classifier.1.weight" in state
+        m = tv_models.efficientnet_b3(weights=None)
+        in_feat = m.classifier[1].in_features  # 1536
+        m.classifier = (
+            nn.Sequential(nn.Dropout(0.3), nn.Linear(in_feat, 2))
+            if has_dropout else nn.Linear(in_feat, 2)
+        )
+        m.load_state_dict(state)
+        m.eval()
+        _efficientnet_model  = m.to(device)
+        _efficientnet_loaded = True
+        print(
+            f"[INFO] EfficientNet-B3 loaded: {efficientnet_path} "
+            f"(threshold={_efficientnet_threshold:.3f}, dropout={has_dropout})"
+        )
+    else:
+        print(f"[INFO] EfficientNet-B3 weights not found — will show as pending in UI.")
+        _efficientnet_loaded = False
+
+    return _yolo_model, _resnet_model, _densenet_model, _efficientnet_model
 
 
 # ---------------------------------------------------------------------------
@@ -144,10 +183,10 @@ def load_models(config):
 def _preprocess(image_path, input_size, config):
     """Val/test transform — Resize, Grayscale 3ch, ToTensor, ImageNet norm.
 
-    NOTE: No CLAHE here. Correct for E4a_m050 (ResNet) and D1 (DenseNet) which
-    were trained without CLAHE. If weights are swapped to CAALMIX-trained models
-    (E5/E6/E7), add CLAHETransform() as the first step — omitting it would cause
-    silent input-distribution mismatch and accuracy degradation.
+    NOTE: No CLAHE here. Correct for E4a_m050 (ResNet), D1 (DenseNet), and F1
+    (EfficientNet-B3), all trained without CLAHE. If weights are swapped to
+    CAALMIX-trained models (E5/E6/E7), add CLAHETransform() as the first step —
+    omitting it would cause silent input-distribution mismatch and accuracy degradation.
     """
     transform = transforms.Compose([
         transforms.Resize((input_size, input_size)),
@@ -204,6 +243,17 @@ def run_densenet(tensor, config):
     return label, prob
 
 
+def run_efficientnet(tensor, config):
+    """EfficientNet-B3 forward pass. Returns (label, probability)."""
+    assert _efficientnet_model is not None, "EfficientNet not loaded"
+    device = config["device"]
+    with torch.no_grad():
+        logits = _efficientnet_model(tensor.to(device))
+        prob   = float(torch.softmax(logits, dim=1)[0, _efficientnet_frac_idx])
+    label = "Fractured" if prob >= _efficientnet_threshold else "Non-Fractured"
+    return label, prob
+
+
 # ---------------------------------------------------------------------------
 # Image utilities
 # ---------------------------------------------------------------------------
@@ -241,37 +291,35 @@ def _draw_bbox_base64(image_path, bbox, confidence):
 # GEL — Gated Ensemble Logic
 # ---------------------------------------------------------------------------
 
-def _run_gel(p_r, p_d, config):
-    """BVG → OAM → PDWF. Returns (p_final, gate_passed, g_consensus).
+def _run_gel(probs_f1, config):
+    """BVG -> OAM -> PDWF. Returns (p_final, gate_passed, g_consensus).
+
+    probs_f1: list of (probability, f1_weight) tuples — one per loaded classifier.
+              Accepts 2 or 3 classifiers; logic is identical regardless of count.
 
     YOLO is intentionally excluded from PDWF: detection confidence is not
     a classification probability and cannot be meaningfully mixed with
     softmax outputs in a weighted sum.
     """
-    f1_r = config["gel_f1_resnet"]
-    f1_d = config["gel_f1_densenet"]
     tau  = config["gel_tau"]
     dlim = config["gel_disagree_lim"]
     k    = config["gel_penalty_k"]
 
     # Step 2 — Binary Verification Gate (controls bbox auth, not the probability)
-    g = (p_r * f1_r + p_d * f1_d) / (f1_r + f1_d)
+    total_f1    = sum(f1 for _, f1 in probs_f1)
+    g           = sum(p * f1 for p, f1 in probs_f1) / total_f1
     gate_passed = g >= tau
 
-    # Step 3 — RC initialisation (classifier-only normalization)
-    total = f1_r + f1_d
-    rc_r  = f1_r / total
-    rc_d  = f1_d / total
+    # Step 3 — RC initialisation (F1-normalised classifier weights)
+    rcs = [f1 / total_f1 for _, f1 in probs_f1]
 
     # Step 4 — Outlier-Aware Modification
-    mu = (p_r + p_d) / 2.0
-    if abs(p_r - mu) > dlim:
-        rc_r *= k
-    if abs(p_d - mu) > dlim:
-        rc_d *= k
+    mu  = sum(p for p, _ in probs_f1) / len(probs_f1)
+    rcs = [rc * k if abs(p - mu) > dlim else rc for (p, _), rc in zip(probs_f1, rcs)]
 
     # Step 5 — Performance-Driven Weighted Fusion (always computed regardless of gate)
-    p_final = (p_r * rc_r + p_d * rc_d) / (rc_r + rc_d)
+    total_rc = sum(rcs)
+    p_final  = sum(p * rc for (p, _), rc in zip(probs_f1, rcs)) / total_rc
     return p_final, gate_passed, g
 
 
@@ -283,22 +331,23 @@ def predict(image_path, config, inference_mode="gel"):
     """Orchestrate inference and return result dict.
 
     inference_mode:
-      "gel"    — GEL: all 3 models + BVG/OAM/PDWF (default).
+      "gel"    — GEL: all models + BVG/OAM/PDWF (default).
       "yolo"   — YOLO only. Classifiers skipped entirely.
-      "resnet" — Classifiers only (ResNet-18 + DenseNet-169). YOLO skipped.
+      "resnet" — All classifiers (ResNet-18 + DenseNet-169 + EfficientNet-B3). YOLO skipped.
     """
     result = {
-        "mode":                  None,
-        "label":                 "Non-Fractured",
-        "fracture_probability":  0.0,
-        "yolo_confidence":       None,
-        "bbox":                  None,
-        "resnet_probability":    None,
-        "densenet_probability":  None,
-        "gel_gate_passed":       None,
-        "gel_consensus":         None,
-        "gradcam_image":         None,
-        "xray_with_box":         None,
+        "mode":                       None,
+        "label":                      "Non-Fractured",
+        "fracture_probability":       0.0,
+        "yolo_confidence":            None,
+        "bbox":                       None,
+        "resnet_probability":         None,
+        "densenet_probability":       None,
+        "efficientnet_probability":   None,
+        "gel_gate_passed":            None,
+        "gel_consensus":              None,
+        "gradcam_image":              None,
+        "xray_with_box":              None,
         "disclaimer": (
             "This prediction is provided to support radiologist review. "
             "Clinical judgment is required for diagnosis."
@@ -330,14 +379,15 @@ def predict(image_path, config, inference_mode="gel"):
         return result
 
     # ----------------------------------------------------------------
-    # CLASSIFIER-ONLY: skip YOLO, run ResNet-18 + DenseNet
+    # CLASSIFIER-ONLY: skip YOLO, run all classifiers
     # ----------------------------------------------------------------
     if inference_mode == "resnet":
         result["mode"]          = "CLASSIFIER-ONLY"
         result["xray_with_box"] = _image_to_base64(image_path)
 
-        resnet_tensor   = _preprocess(image_path, config["resnet_input_size"],   config) if _resnet_loaded   else None
-        densenet_tensor = _preprocess(image_path, config["densenet_input_size"], config) if _densenet_loaded else None
+        resnet_tensor       = _preprocess(image_path, config["resnet_input_size"],       config) if _resnet_loaded       else None
+        densenet_tensor     = _preprocess(image_path, config["densenet_input_size"],     config) if _densenet_loaded     else None
+        efficientnet_tensor = _preprocess(image_path, config["efficientnet_input_size"], config) if _efficientnet_loaded else None
 
         if _resnet_loaded:
             label, resnet_prob = run_resnet(resnet_tensor, config)
@@ -357,24 +407,32 @@ def predict(image_path, config, inference_mode="gel"):
             )
         else:
             result["gradcam_image"] = result["xray_with_box"]
+
+        if _efficientnet_loaded:
+            _, efficientnet_prob = run_efficientnet(efficientnet_tensor, config)
+            result["efficientnet_probability"] = efficientnet_prob
+
         return result
 
     # ----------------------------------------------------------------
     # GEL: Gated Ensemble Logic (novel ensemble contribution)
-    # All three models always run. BVG gates the YOLO bbox.
-    # P_final comes from classifier-only PDWF.
+    # All models always run. BVG gates the YOLO bbox.
+    # P_final comes from classifier-only PDWF (2 or 3 classifiers).
     # ----------------------------------------------------------------
     if inference_mode == "gel":
-        resnet_tensor   = _preprocess(image_path, config["resnet_input_size"],   config) if _resnet_loaded   else None
-        densenet_tensor = _preprocess(image_path, config["densenet_input_size"], config) if _densenet_loaded else None
-        detections      = run_yolo(_yolo_model, image_path, config)
+        resnet_tensor       = _preprocess(image_path, config["resnet_input_size"],       config) if _resnet_loaded       else None
+        densenet_tensor     = _preprocess(image_path, config["densenet_input_size"],     config) if _densenet_loaded     else None
+        efficientnet_tensor = _preprocess(image_path, config["efficientnet_input_size"], config) if _efficientnet_loaded else None
+        detections          = run_yolo(_yolo_model, image_path, config)
 
-        # Raw classifier probabilities (neutral 0.5 if model absent)
-        p_r = run_resnet(resnet_tensor,   config)[1] if _resnet_loaded   else 0.5
-        p_d = run_densenet(densenet_tensor, config)[1] if _densenet_loaded else 0.5
+        # Raw classifier probabilities
+        p_r = run_resnet(resnet_tensor,           config)[1] if _resnet_loaded       else None
+        p_d = run_densenet(densenet_tensor,       config)[1] if _densenet_loaded     else None
+        p_e = run_efficientnet(efficientnet_tensor, config)[1] if _efficientnet_loaded else None
 
-        result["resnet_probability"]   = p_r if _resnet_loaded   else None
-        result["densenet_probability"] = p_d if _densenet_loaded else None
+        result["resnet_probability"]       = p_r
+        result["densenet_probability"]     = p_d
+        result["efficientnet_probability"] = p_e
 
         # YOLO detection (bbox + confidence, independent of gate)
         best = None
@@ -383,15 +441,24 @@ def predict(image_path, config, inference_mode="gel"):
             result["yolo_confidence"] = best["confidence"]
             result["bbox"]            = best["bbox"]
 
-        if _resnet_loaded and _densenet_loaded:
-            # Full GEL path
-            p_final, gate_passed, g = _run_gel(p_r, p_d, config)
+        # Build (prob, f1_weight) list for all loaded classifiers
+        probs_f1 = []
+        if p_r is not None:
+            probs_f1.append((p_r, config["gel_f1_resnet"]))
+        if p_d is not None:
+            probs_f1.append((p_d, config["gel_f1_densenet"]))
+        if p_e is not None:
+            probs_f1.append((p_e, config["gel_f1_efficientnet"]))
+
+        if len(probs_f1) >= 2:
+            # Full GEL: BVG + OAM + PDWF across all loaded classifiers
+            p_final, gate_passed, g = _run_gel(probs_f1, config)
             result["mode"]            = "GEL"
             result["gel_gate_passed"] = gate_passed
             result["gel_consensus"]   = round(g, 4)
-        elif _resnet_loaded or _densenet_loaded:
-            # Degraded: single classifier, no OAM
-            p_solo      = p_r if _resnet_loaded else p_d
+        elif len(probs_f1) == 1:
+            # Degraded: single classifier available, no OAM
+            p_solo      = probs_f1[0][0]
             gate_passed = p_solo >= config["gel_tau"]
             p_final     = p_solo if gate_passed else 0.0
             result["mode"]            = "GEL-DEGRADED"

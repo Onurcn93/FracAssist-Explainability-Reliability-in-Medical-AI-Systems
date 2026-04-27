@@ -88,6 +88,7 @@ function handleFile(file) {
     showState('loading');
     resetMetrics();
     _resetZoom();
+    document.getElementById('img-id-badge').textContent = 'IMG · ' + file.name;
 
     const formData = new FormData();
     formData.append('image', file);
@@ -178,14 +179,32 @@ function applyPrediction(data) {
         densenetSub.textContent = 'D1 not loaded';
     }
 
+    // ── EfficientNet-B3 model card ─────────────────────────────────────────
+    const efficientnetVal = document.getElementById('efficientnet-val');
+    const efficientnetSub = document.getElementById('efficientnet-sub');
+    if (data.efficientnet_probability != null) {
+        const ep = data.efficientnet_probability;
+        efficientnetVal.textContent = ep.toFixed(2);
+        efficientnetVal.className   = 'model-card-value ' + (isFrac ? 'alert-red' : 'text-teal');
+        efficientnetSub.textContent = (data.mode === 'GEL' || data.mode === 'GEL-DEGRADED') ? 'F1 · GEL' : 'F1 output';
+    } else if (data.mode === 'YOLO-ONLY') {
+        efficientnetVal.textContent = '—';
+        efficientnetVal.className   = 'model-card-value';
+        efficientnetSub.textContent = 'skipped';
+    } else {
+        efficientnetVal.textContent = '—';
+        efficientnetVal.className   = 'model-card-value';
+        efficientnetSub.textContent = 'F1 not loaded';
+    }
+
     // ── Status banner ──────────────────────────────────────────────────────
     const banner = document.getElementById('status-banner');
     banner.className = 'status-banner ' + (isFrac ? 'status-fractured' : 'status-ok');
     document.getElementById('status-dot').className  = 'status-dot ' + (isFrac ? 'dot-red' : 'dot-teal');
     const _modeLabels  = { 'YOLO-ONLY': 'YOLO ONLY', 'CLASSIFIER-ONLY': 'CLASSIFIER ONLY',
                            'GEL': 'GEL ENSEMBLE',   'GEL-DEGRADED': 'GEL DEGRADED' };
-    const _modelLabels = { 'YOLO-ONLY': 'Y1B',      'CLASSIFIER-ONLY': 'E4a + D1',
-                           'GEL': 'Y1B · E4a · D1', 'GEL-DEGRADED': 'partial models' };
+    const _modelLabels = { 'YOLO-ONLY': 'Y1B',      'CLASSIFIER-ONLY': 'E4a · D1 · F1',
+                           'GEL': 'Y1B · E4a · D1 · F1', 'GEL-DEGRADED': 'partial models' };
     document.getElementById('status-text').textContent  = _modeLabels[data.mode]  || data.mode;
     document.getElementById('status-model').textContent = _modelLabels[data.mode] || '';
 
@@ -232,9 +251,10 @@ function resetMetrics() {
 
     // Model cards
     [
-        ['yolo-val',     'model-card-value', 'yolo-sub',     'detector'],
-        ['resnet-val',   'model-card-value', 'resnet-sub',   'classifier'],
-        ['densenet-val', 'model-card-value', 'densenet-sub', 'classifier'],
+        ['yolo-val',          'model-card-value', 'yolo-sub',          'detector'],
+        ['resnet-val',        'model-card-value', 'resnet-sub',        'classifier'],
+        ['densenet-val',      'model-card-value', 'densenet-sub',      'classifier'],
+        ['efficientnet-val',  'model-card-value', 'efficientnet-sub',  'classifier'],
     ].forEach(([valId, valClass, subId, subText]) => {
         const v = document.getElementById(valId);
         v.textContent = '—';
@@ -265,6 +285,7 @@ function resetUI() {
     resetMetrics();
     document.getElementById('view-box').checked = true;
     _currentOverlay = 'box';
+    document.getElementById('img-id-badge').textContent = '';
 }
 
 // ─── Health check on load — populate Config device field ──────────────────

@@ -14,7 +14,7 @@ import os
 import sys
 import tempfile
 
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, make_response, request, send_file
 from flask_cors import CORS
 
 # Ensure both inference/ and repo root are on path so all imports resolve
@@ -37,6 +37,11 @@ _ALLOWED = {".jpg", ".jpeg", ".png"}
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+@app.route("/favicon.ico")
+def favicon():
+    return make_response("", 204)
+
 
 @app.route("/")
 def index():

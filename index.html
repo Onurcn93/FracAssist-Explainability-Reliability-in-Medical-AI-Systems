@@ -36,7 +36,7 @@
                         <select class="btn model-select" id="model-select">
                             <option value="gel">Gated Ensemble Logic (GEL)</option>
                             <option value="yolo">YOLOv8s only</option>
-                            <option value="resnet">ResNet-18 + DenseNet-169 only</option>
+                            <option value="resnet">Classifiers only (no YOLO)</option>
                         </select>
                     </div>
                     <div class="toggle-group">
@@ -63,6 +63,7 @@
                     <div id="state-result" class="img-overlay hidden">
                         <img id="result-img" alt="Prediction result">
                         <div class="img-badge" id="img-badge">GradCAM · DenseNet-169 · denseblock4</div>
+                        <div class="img-id-badge" id="img-id-badge"></div>
                         <div class="zoom-controls">
                             <span class="zoom-label" id="zoom-label">100%</span>
                             <input type="range" class="zoom-slider" id="zoom-slider" min="100" max="140" value="100" step="1">
@@ -80,7 +81,7 @@
                     <div class="card-subtitle" id="prob-sub">awaiting image</div>
                 </div>
 
-                <!-- ── 3 model output windows ─────────────────────── -->
+                <!-- ── 4 model output windows ─────────────────────── -->
                 <div class="model-outputs">
                     <div class="model-card">
                         <div class="model-card-title">YOLOv8s · Y1B</div>
@@ -96,6 +97,11 @@
                         <div class="model-card-title">DenseNet-169 · D1</div>
                         <div class="model-card-value" id="densenet-val">—</div>
                         <div class="model-card-sub" id="densenet-sub">classifier</div>
+                    </div>
+                    <div class="model-card">
+                        <div class="model-card-title">EfficientNet-B3 · F1</div>
+                        <div class="model-card-value" id="efficientnet-val">—</div>
+                        <div class="model-card-sub" id="efficientnet-sub">classifier</div>
                     </div>
                 </div>
 
@@ -142,11 +148,19 @@
                     <div class="health-row"><span>Threshold</span><span>0.175 (val-optimal)</span></div>
                     <div class="health-row"><span>Split</span><span class="text-teal">val + test confirmed</span></div>
                 </div>
+                <div class="health-card">
+                    <div class="health-card-title">EfficientNet-B3 · F1</div>
+                    <div class="health-row"><span>F1 (Fractured)</span><span class="alert-amber">pending F1 training</span></div>
+                    <div class="health-row"><span>Architecture</span><span>Compound scaling φ=1.2 · 12M params</span></div>
+                    <div class="health-row"><span>Head</span><span>Linear(1536→2)</span></div>
+                    <div class="health-row"><span>GradCAM target</span><span>features.8 (final ConvBNAct)</span></div>
+                    <div class="health-row"><span>Status</span><span class="alert-amber">not yet trained</span></div>
+                </div>
                 <div class="health-card health-card-wide">
                     <div class="health-card-title">GEL — Gated Ensemble Logic</div>
                     <div class="health-row"><span>BVG — Bounding Box Validation Gate</span><span class="text-teal">classifier consensus authenticates YOLO bbox (τ = 0.35)</span></div>
-                    <div class="health-row"><span>OAM — Outlier-Aware Modification</span><span>outlier classifier penalised when |p_r − p_d| &gt; 0.40</span></div>
-                    <div class="health-row"><span>PDWF — Performance-Driven Weighted Fusion</span><span class="text-teal">F1-weighted average: ResNet-18 (0.658) + DenseNet-169 (0.724)</span></div>
+                    <div class="health-row"><span>OAM — Outlier-Aware Modification</span><span>outlier penalised when |p_i − μ| &gt; 0.40 · adapts to 2 or 3 classifiers</span></div>
+                    <div class="health-row"><span>PDWF — Performance-Driven Weighted Fusion</span><span class="text-teal">F1-weighted: ResNet-18 (0.658) + DenseNet-169 (0.724) + EfficientNet-B3 (pending)</span></div>
                     <div class="health-row"><span>GradCAM target</span><span>DenseNet-169 denseblock4</span></div>
                     <div class="health-row"><span>Dataset</span><span>FracAtlas · 4,083 X-rays</span></div>
                 </div>
@@ -177,6 +191,13 @@
                         <div class="config-sub">D1 — val-set threshold sweep optimal</div>
                     </div>
                     <span class="config-val" id="cfg-densenet-threshold">0.175</span>
+                </div>
+                <div class="config-row">
+                    <div>
+                        <div class="config-label">EfficientNet-B3 Threshold</div>
+                        <div class="config-sub">F1 — val-set threshold sweep optimal (pending training)</div>
+                    </div>
+                    <span class="config-val alert-amber" id="cfg-efficientnet-threshold">pending</span>
                 </div>
                 <div class="config-row">
                     <div>

@@ -45,6 +45,11 @@ def run_densenet(config: dict) -> None:
     run_training(config)
 
 
+def run_efficientnet(config: dict) -> None:
+    from models.classification.efficientnet import run_training
+    run_training(config)
+
+
 def set_global_seed(seed: int) -> None:
     import numpy as np
     import torch
@@ -127,6 +132,8 @@ def main():
             run_resnet(config)
         elif config.get("task") == "classify_densenet":
             run_densenet(config)
+        elif config.get("task") == "classify_efficientnet":
+            run_efficientnet(config)
         else:
             print(f"[error] No training module found for config task '{config.get('task')}'")
             sys.exit(1)
