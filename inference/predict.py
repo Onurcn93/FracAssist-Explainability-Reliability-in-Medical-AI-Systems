@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 import torch
 import torch.nn as nn
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from torchvision import models as tv_models, transforms
 from ultralytics import YOLO
 
@@ -287,19 +287,42 @@ def _image_to_base64(image_path):
     return _encode_base64(img)
 
 
-def _draw_bbox_base64(image_path, bbox, confidence):
-    img = _imread(image_path)
-    if img is None:
+def _draw_bbox_base64(image_path, bbox, confidence, gel_prob=None):
+    img_cv = _imread(image_path)
+    if img_cv is None:
         return None
+
     x1, y1, x2, y2 = [int(v) for v in bbox]
-    red_bgr = (0, 91, 255)
-    cv2.rectangle(img, (x1, y1), (x2, y2), red_bgr, 2)
-    label = f"FRACTURE {confidence:.0%}"
-    (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-    cv2.rectangle(img, (x1, y1 - th - 8), (x1 + tw + 6, y1), red_bgr, -1)
-    cv2.putText(img, label, (x1 + 3, y1 - 4),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
-    return _encode_base64(img)
+    img_rgb = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(img_rgb)
+    draw    = ImageDraw.Draw(pil_img)
+    accent  = (255, 91, 0)
+
+    draw.rectangle([x1, y1, x2, y2], outline=accent, width=2)
+
+    pct   = f"{gel_prob:.0%}" if gel_prob is not None else f"{confidence:.0%}"
+    label = f"FRACTURE: {pct}"
+
+    font = ImageFont.load_default()
+    for bold_p in ("C:/Windows/Fonts/segoeuib.ttf", "C:/Windows/Fonts/arialbd.ttf"):
+        try:
+            font = ImageFont.truetype(bold_p, 12)
+            break
+        except Exception:
+            continue
+
+    pad_x, pad_y = 6, 4
+    bb   = draw.textbbox((0, 0), label, font=font)
+    tw   = bb[2] - bb[0]
+    th   = bb[3] - bb[1]
+    lh   = th + 2 * pad_y
+
+    lx1, ly1 = x1, max(0, y1 - lh - 2)
+    lx2, ly2 = x1 + tw + 2 * pad_x, y1 - 2
+    draw.rectangle([lx1, ly1, lx2, ly2], fill=accent)
+    draw.text(((lx1 + lx2) / 2, (ly1 + ly2) / 2), label, font=font, fill=(255, 255, 255), anchor='mm')
+
+    return _encode_base64(cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR))
 
 
 # ---------------------------------------------------------------------------
@@ -503,7 +526,7 @@ def predict(image_path, config, inference_mode="gel"):
 
         # Authenticated bbox: YOLO fired AND BVG gate passed
         if best and gate_passed:
-            result["xray_with_box"] = _draw_bbox_base64(image_path, best["bbox"], best["confidence"])
+            result["xray_with_box"] = _draw_bbox_base64(image_path, best["bbox"], best["confidence"], gel_prob=p_final)
         else:
             result["xray_with_box"] = _image_to_base64(image_path)
 

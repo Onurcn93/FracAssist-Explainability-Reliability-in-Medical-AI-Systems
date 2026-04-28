@@ -14,6 +14,7 @@
             <div class="brand">FracAssist</div>
             <nav class="tabs">
                 <button class="tab active" data-tab="assist">Assist</button>
+                <button class="tab" data-tab="review">Expert Review</button>
                 <button class="tab" data-tab="health">Model Status</button>
                 <button class="tab" data-tab="config">Config</button>
             </nav>
@@ -64,6 +65,7 @@
                         <img id="result-img" alt="Prediction result">
                         <div class="img-badge" id="img-badge">GradCAM · DenseNet-169 · denseblock4</div>
                         <div class="img-id-badge" id="img-id-badge"></div>
+                        <button class="send-review-btn" id="send-review-btn">Send Review</button>
                         <div class="zoom-controls">
                             <span class="zoom-label" id="zoom-label">100%</span>
                             <input type="range" class="zoom-slider" id="zoom-slider" min="100" max="140" value="100" step="1">
@@ -117,6 +119,51 @@
 
             </section>
         </main>
+
+        <!-- ── TAB: Expert Review ─────────────────────────────────── -->
+        <section id="tab-review" class="tab-panel hidden review-panel">
+
+            <div class="review-header-bar">
+                <span class="review-header-title">Awaiting Expert Review</span>
+                <span class="review-header-count" id="review-count">2 pending</span>
+            </div>
+
+            <div class="review-table">
+                <div class="review-table-head">
+                    <div>Image ID</div>
+                    <div>Preview</div>
+                    <div>Condition</div>
+                    <div>GEL Verdict</div>
+                    <div>Model Output</div>
+                    <div>Status</div>
+                </div>
+                <div id="review-queue"></div>
+            </div>
+
+            <!-- Diagnose Panel — always visible, fills remaining height -->
+            <div class="diagnose-panel" id="diagnose-panel">
+                <div class="diagnose-panel-header">
+                    <span class="diagnose-panel-title">Diagnose Panel</span>
+                    <span class="diagnose-panel-id" id="diagnose-panel-id">—</span>
+                    <button class="diagnose-close-btn" onclick="closeDiagnose()">✕</button>
+                </div>
+                <div class="diagnose-panel-body">
+                    <div class="diagnose-viewer">
+                        <div class="diagnose-xray">
+                            <img class="diagnose-xray-img hidden" id="diagnose-img" alt="">
+                            <span class="placeholder-text" id="diagnose-placeholder">X-Ray Viewer</span>
+                        </div>
+                    </div>
+                    <div class="diagnose-controls">
+                        <button class="btn diagnose-btn">Draw Boxes</button>
+                        <button class="btn diagnose-btn">True Label</button>
+                        <textarea class="diagnose-comments" placeholder="Diagnosis Comments (Optional)"></textarea>
+                        <button class="btn diagnose-submit">Submit Diagnose</button>
+                    </div>
+                </div>
+            </div>
+
+        </section>
 
         <!-- ── TAB: Model Status ───────────────────────────────────── -->
         <section id="tab-health" class="tab-panel hidden health-panel">

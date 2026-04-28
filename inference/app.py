@@ -10,12 +10,15 @@ Routes:
     POST /predict  → multipart/form-data with 'image' field → inference JSON
 """
 
+import csv
+import datetime
 import os
 import sys
 import tempfile
 
 from flask import Flask, jsonify, make_response, request, send_file
 from flask_cors import CORS
+from PIL import Image
 
 # Ensure both inference/ and repo root are on path so all imports resolve
 _INFERENCE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -55,6 +58,85 @@ def health():
         "models_loaded": True,
         "device": CONFIG["device"],
     })
+
+
+_FRACTATLAS_DIRS   = [
+    os.path.join(_ROOT, "FracAtlas", "images", "Fractured"),
+    os.path.join(_ROOT, "FracAtlas", "images", "Non_fractured"),
+]
+_REVIEW_CSV        = os.path.join(_ROOT, "review", "expert_review.csv")
+_REVIEW_IMAGES_DIR = os.path.join(_ROOT, "review", "images")
+_CSV_FIELDS        = ["image_id", "gel_probability", "gel_label",
+                      "resnet_probability", "densenet_probability",
+                      "efficientnet_probability", "true_label", "status", "timestamp"]
+
+
+@app.route("/fractatlas/<filename>")
+def fractatlas_image(filename):
+    for folder in _FRACTATLAS_DIRS:
+        path = os.path.join(folder, filename)
+        if os.path.isfile(path):
+            return send_file(path)
+    return make_response("Not found", 404)
+
+
+@app.route("/review-queue", methods=["GET"])
+def review_queue():
+    rows = []
+    if os.path.exists(_REVIEW_CSV):
+        with open(_REVIEW_CSV, newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+    return jsonify(rows)
+
+
+@app.route("/send-review", methods=["POST"])
+def send_review():
+    data = request.json or {}
+    image_id = data.get("image_id", "").strip()
+    if not image_id:
+        return jsonify({"error": "image_id required"}), 400
+
+    # Reject duplicate
+    if os.path.exists(_REVIEW_CSV):
+        with open(_REVIEW_CSV, newline="", encoding="utf-8") as f:
+            existing = [r["image_id"] for r in csv.DictReader(f)]
+        if image_id in existing:
+            return jsonify({"error": "already in review queue"}), 409
+
+    # Generate thumbnail from FracAtlas source; derive true label from folder
+    os.makedirs(_REVIEW_IMAGES_DIR, exist_ok=True)
+    thumb_path = os.path.join(_REVIEW_IMAGES_DIR, image_id)
+    true_label = ""
+    for folder in _FRACTATLAS_DIRS:
+        src = os.path.join(folder, image_id)
+        if os.path.isfile(src):
+            true_label = os.path.basename(folder)  # "Fractured" or "Non_fractured"
+            if not os.path.exists(thumb_path):
+                img = Image.open(src).convert("RGB")
+                img.thumbnail((96, 96), Image.LANCZOS)
+                img.save(thumb_path, quality=88)
+            break
+
+    # Append row to CSV
+    row = {
+        "image_id":               image_id,
+        "gel_probability":        data.get("gel_probability", ""),
+        "gel_label":              data.get("gel_label", ""),
+        "resnet_probability":     data.get("resnet_probability", ""),
+        "densenet_probability":   data.get("densenet_probability", ""),
+        "efficientnet_probability": data.get("efficientnet_probability", ""),
+        "true_label":             true_label,
+        "status":                 "pending",
+        "timestamp":              datetime.datetime.now().isoformat(timespec="seconds"),
+    }
+    write_header = not os.path.exists(_REVIEW_CSV)
+    with open(_REVIEW_CSV, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_CSV_FIELDS)
+        if write_header:
+            writer.writeheader()
+        writer.writerow(row)
+
+    return jsonify({"status": "ok"})
 
 
 @app.route("/predict", methods=["POST"])

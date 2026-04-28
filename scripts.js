@@ -8,8 +8,9 @@
 const API_URL = 'http://127.0.0.1:5000';
 
 // ─── State ────────────────────────────────────────────────────────────────
-let _resultData     = null;
-let _currentOverlay = 'box'; // matches the default checked radio
+let _resultData      = null;
+let _currentOverlay  = 'box';
+let _currentFilename = null;
 
 // ─── Tab switching ─────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
@@ -18,8 +19,29 @@ document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.add('active');
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
         document.getElementById('tab-' + tab.dataset.tab).classList.remove('hidden');
+        if (tab.dataset.tab === 'review') _loadReviewQueue();
     });
 });
+
+// ─── Expert Review — diagnose panel ────────────────────────────────────────
+function openDiagnose(btn, imageId) {
+    document.getElementById('diagnose-panel-id').textContent = imageId;
+    const img = document.getElementById('diagnose-img');
+    img.src = `${API_URL}/fractatlas/${imageId}`;
+    img.classList.remove('hidden');
+    document.getElementById('diagnose-placeholder').classList.add('hidden');
+    document.querySelectorAll('.review-row').forEach(r => r.classList.remove('review-row-active'));
+    btn.closest('.review-row').classList.add('review-row-active');
+}
+
+function closeDiagnose() {
+    document.getElementById('diagnose-panel-id').textContent = '—';
+    const img = document.getElementById('diagnose-img');
+    img.classList.add('hidden');
+    img.src = '';
+    document.getElementById('diagnose-placeholder').classList.remove('hidden');
+    document.querySelectorAll('.review-row').forEach(r => r.classList.remove('review-row-active'));
+}
 
 // ─── File picker ───────────────────────────────────────────────────────────
 document.getElementById('select-btn').addEventListener('click', () => {
@@ -85,6 +107,7 @@ function handleFile(file) {
     }
 
     _resultData = null;
+    _currentFilename = file.name;
     showState('loading');
     resetMetrics();
     _resetZoom();
@@ -284,6 +307,89 @@ function resetUI() {
     document.getElementById('view-box').checked = true;
     _currentOverlay = 'box';
     document.getElementById('img-id-badge').textContent = '';
+}
+
+// ─── Send Review ───────────────────────────────────────────────────────────
+document.getElementById('send-review-btn').addEventListener('click', () => {
+    if (!_resultData || !_currentFilename) return;
+    const btn = document.getElementById('send-review-btn');
+    btn.textContent = 'Sending…';
+    btn.disabled = true;
+
+    fetch(`${API_URL}/send-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            image_id:               _currentFilename,
+            gel_probability:        _resultData.fracture_probability ?? '',
+            gel_label:              _resultData.label ?? '',
+            resnet_probability:     _resultData.resnet_probability ?? '',
+            densenet_probability:   _resultData.densenet_probability ?? '',
+            efficientnet_probability: _resultData.efficientnet_probability ?? '',
+        }),
+    })
+    .then(r => r.json())
+    .then(d => {
+        btn.textContent = d.error ? 'Already sent' : 'Sent ✓';
+        setTimeout(() => { btn.textContent = 'Send Review'; btn.disabled = false; }, 2000);
+    })
+    .catch(() => {
+        btn.textContent = 'Error';
+        setTimeout(() => { btn.textContent = 'Send Review'; btn.disabled = false; }, 2000);
+    });
+});
+
+// ─── Expert Review queue loader ────────────────────────────────────────────
+function _loadReviewQueue() {
+    fetch(`${API_URL}/review-queue`)
+        .then(r => r.json())
+        .then(rows => {
+            const queue   = document.getElementById('review-queue');
+            const counter = document.getElementById('review-count');
+            queue.innerHTML = '';
+            const pending = rows.filter(r => r.status === 'pending').length;
+            counter.textContent = pending + ' pending';
+
+            rows.forEach(row => {
+                const isDone   = row.status === 'diagnosed';
+                const gelProb  = parseFloat(row.gel_probability  || 0);
+                const rProb    = parseFloat(row.resnet_probability || 0);
+                const dProb    = parseFloat(row.densenet_probability || 0);
+                const eProb    = parseFloat(row.efficientnet_probability || 0);
+                const isFrac   = row.gel_label === 'Fractured';
+
+                const trueFrac  = row.true_label === 'Fractured';
+                const gelFrac   = isFrac;
+                const rFrac     = rProb >= 0.525;
+                const dFrac     = dProb >= 0.175;
+                const eFrac     = eProb >= 0.525;
+
+                const trueClass = trueFrac ? 'condition-fractured' : 'condition-nonfractured';
+                const trueLabel = trueFrac ? 'FRACTURED' : 'NON-FRACTURED';
+                const gelClass  = gelFrac  ? 'condition-fractured' : 'condition-nonfractured';
+                const gelLabel  = gelFrac  ? 'FRACTURED' : 'NON-FRACTURED';
+
+                const chipR = `<span class="prob-chip ${rFrac ? 'prob-fracture' : ''}">ResNet ${rProb.toFixed(2)} · ${rFrac ? 'FRAC' : 'NON-FRAC'}</span>`;
+                const chipD = `<span class="prob-chip ${dFrac ? 'prob-fracture' : ''}">DenseNet ${dProb.toFixed(2)} · ${dFrac ? 'FRAC' : 'NON-FRAC'}</span>`;
+                const chipE = `<span class="prob-chip ${eFrac ? 'prob-fracture' : ''}">EfficientNet ${eProb.toFixed(2)} · ${eFrac ? 'FRAC' : 'NON-FRAC'}</span>`;
+                const chipG = `<span class="prob-chip ${gelFrac ? 'prob-fracture' : ''}">GEL ${gelProb.toFixed(2)} · ${gelFrac ? 'FRAC' : 'NON-FRAC'}</span>`;
+
+                const actionBtn = isDone
+                    ? `<button class="review-action-btn btn-diagnosed" disabled>Diagnosed</button>`
+                    : `<button class="review-action-btn btn-review" onclick="openDiagnose(this,'${row.image_id}')">Review</button>`;
+
+                queue.insertAdjacentHTML('beforeend', `
+                    <div class="review-row ${isDone ? 'review-row-done' : ''}" data-rowid="${row.image_id}">
+                        <div class="review-col-id"><span class="review-id-text">${row.image_id}</span></div>
+                        <div class="review-col-thumb"><div class="review-thumb-box"><img class="review-thumb-img" src="${API_URL}/review/images/${row.image_id}" alt=""></div></div>
+                        <div class="review-col-condition"><span class="condition-badge ${trueClass}">${trueLabel}</span></div>
+                        <div class="review-col-condition"><span class="condition-badge ${gelClass}">${gelLabel}</span></div>
+                        <div class="review-col-prob">${chipG}${chipR}${chipD}${chipE}</div>
+                        <div class="review-col-action">${actionBtn}</div>
+                    </div>`);
+            });
+        })
+        .catch(() => {});
 }
 
 // ─── Health check on load — populate Config device field ──────────────────

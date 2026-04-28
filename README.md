@@ -62,11 +62,14 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 │   └── yolo/                 # YOLO localization & segmentation (Y-series)
 ├── inference/                # FracAssist clinical decision support system
 │   ├── config.py             # Fixed hyperparameters, weight paths, CUDA auto-detect
-│   ├── predict.py            # GEL ensemble + GradCAM
-│   └── app.py                # Flask: GET /, GET /health, POST /predict
-├── index.html                # FracAssist web UI (three tabs: Assist / Model Status / Config)
+│   ├── predict.py            # GEL ensemble + GradCAM + PIL bounding box annotation
+│   └── app.py                # Flask: GET /, GET /health, POST /predict, GET /review-queue, POST /send-review, GET /fractatlas/<filename>
+├── index.html                # FracAssist web UI (four tabs: Assist / Expert Review / Model Status / Config)
 ├── style.css                 # Dark theme — bone-gradient plates, teal/red accents
-├── scripts.js                # UI logic — fetch /predict, overlay toggle, drag-drop, zoom
+├── scripts.js                # UI logic — fetch /predict, overlay toggle, drag-drop, zoom, review queue
+├── review/                   # Expert review workflow
+│   ├── expert_review.csv     # Review queue — image_id, model probabilities, true_label, status, timestamp
+│   └── images/               # 96px thumbnails generated at send-review time
 ├── xai/                      # XAI pillar implementations (Phase 3 — pending)
 ├── utils/
 │   ├── logger.py             # Experiment logging
@@ -84,7 +87,9 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 │   ├── experiments_efficientnet.csv  # All EfficientNet-B3 experiments — hyperparams + metrics
 │   ├── gel_eval_results.txt          # GEL evaluation output — both splits, baselines vs ensemble
 │   └── plots/                    # Training curves (gitignored)
-├── review/                   # Per-image prediction CSVs for error analysis
+├── review/                   # Expert review workflow + per-image prediction CSVs
+│   ├── expert_review.csv         # Review queue — image_id, model probabilities, true_label, status, timestamp
+│   ├── images/                   # 96px thumbnails (generated at send-review time, gitignored)
 │   └── generate_predictions.py   # Writes train/val/test/all.csv with all model probabilities
 └── weights/                  # Saved model weights (gitignored)
 ```
@@ -717,6 +722,12 @@ YOLOv8m underperforms YOLOv8s by −3.8pp. Larger model overfits on the small da
 
 A local web app for clinical decision support. Runs entirely offline; no data leaves the machine.
 
+**Tabs:**
+- **Assist** — Upload X-ray, select inference mode, view GradCAM/bounding box overlay, read per-model probability cards, send cases for expert review
+- **Expert Review** — CSV-driven review queue showing true label (from FracAtlas folder), GEL verdict, and per-model probabilities in a 2×2 chip grid; diagnose panel loads full-resolution original for expert annotation
+- **Model Status** — Approved baseline metrics for all four models + GEL ensemble
+- **Config** — Inference hyperparameters and GEL architecture parameters
+
 ```bash
 # Weights required — place in weights/ before starting:
 #   Y1B_detect_best.pt     (required — YOLO detector)
@@ -781,6 +792,9 @@ BVG uses `p_final` — the same OAM-adjusted PDWF output that becomes the fractu
 | `GET` | `/` | Serve `index.html` |
 | `GET` | `/health` | `{"status": "ok", "device": "cuda:0"}` |
 | `POST` | `/predict` | `multipart/form-data` with `image` field → inference JSON |
+| `GET` | `/fractatlas/<filename>` | Serve full-resolution FracAtlas image by filename (searches Fractured/ and Non_fractured/) |
+| `GET` | `/review-queue` | Return `review/expert_review.csv` as JSON list |
+| `POST` | `/send-review` | Append inference result to review queue; derives `true_label` from FracAtlas folder; 409 on duplicate |
 
 ---
 
