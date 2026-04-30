@@ -38,8 +38,9 @@ _nb_analysis.txt
 *.pyo
 .env
 
-# Expert review thumbnails (generated at runtime from FracAtlas originals)
+# Expert review runtime files (thumbnails + live queue — generated at runtime)
 review/images/
+review/expert_review.csv
 
 # Claude Code local settings
 .claude/

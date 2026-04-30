@@ -139,6 +139,65 @@ def send_review():
     return jsonify({"status": "ok"})
 
 
+@app.route("/submit-diagnosis", methods=["POST"])
+def submit_diagnosis():
+    data = request.json or {}
+    image_id  = data.get("image_id",  "").strip()
+    condition = data.get("condition", "").strip()
+    if not image_id:
+        return jsonify({"error": "image_id required"}), 400
+
+    if not os.path.exists(_REVIEW_CSV):
+        return jsonify({"error": "not found"}), 404
+
+    with open(_REVIEW_CSV, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    updated = False
+    for row in rows:
+        if row["image_id"] == image_id:
+            row["status"] = "diagnosed"
+            if condition:
+                row["true_label"] = condition
+            updated = True
+            break
+
+    if not updated:
+        return jsonify({"error": "not found"}), 404
+
+    with open(_REVIEW_CSV, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_CSV_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    return jsonify({"status": "ok"})
+
+
+@app.route("/cancel-review", methods=["POST"])
+def cancel_review():
+    data = request.json or {}
+    image_id = data.get("image_id", "").strip()
+    if not image_id:
+        return jsonify({"error": "image_id required"}), 400
+
+    if not os.path.exists(_REVIEW_CSV):
+        return jsonify({"error": "not found"}), 404
+
+    with open(_REVIEW_CSV, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    filtered = [r for r in rows if r["image_id"] != image_id]
+    if len(filtered) == len(rows):
+        return jsonify({"error": "not found"}), 404
+
+    with open(_REVIEW_CSV, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_CSV_FIELDS)
+        writer.writeheader()
+        writer.writerows(filtered)
+
+    return jsonify({"status": "ok"})
+
+
 @app.route("/predict", methods=["POST"])
 def predict_endpoint():
     # --- Validate upload ---

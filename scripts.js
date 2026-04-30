@@ -8,9 +8,11 @@
 const API_URL = 'http://127.0.0.1:5000';
 
 // ─── State ────────────────────────────────────────────────────────────────
-let _resultData      = null;
-let _currentOverlay  = 'box';
-let _currentFilename = null;
+let _resultData        = null;
+let _currentOverlay    = 'box';
+let _currentFilename   = null;
+let _diagnoseImageId   = null;
+let _diagnoseCondition = null;
 
 // ─── Tab switching ─────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
@@ -24,7 +26,16 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 // ─── Expert Review — diagnose panel ────────────────────────────────────────
+function _resetDiagnoseCondition() {
+    _diagnoseCondition = null;
+    document.querySelectorAll('.diagnose-cond-btn').forEach(b => b.classList.remove('active-frac', 'active-nonfrac'));
+    document.getElementById('diagnose-comments').value = '';
+}
+
 function openDiagnose(btn, imageId) {
+    _diagnoseImageId = imageId;
+    _resetDiagnoseZoom();
+    _resetDiagnoseCondition();
     document.getElementById('diagnose-panel-id').textContent = imageId;
     const img = document.getElementById('diagnose-img');
     img.src = `${API_URL}/fractatlas/${imageId}`;
@@ -35,6 +46,9 @@ function openDiagnose(btn, imageId) {
 }
 
 function closeDiagnose() {
+    _diagnoseImageId = null;
+    _resetDiagnoseZoom();
+    _resetDiagnoseCondition();
     document.getElementById('diagnose-panel-id').textContent = '—';
     const img = document.getElementById('diagnose-img');
     img.classList.add('hidden');
@@ -42,6 +56,57 @@ function closeDiagnose() {
     document.getElementById('diagnose-placeholder').classList.remove('hidden');
     document.querySelectorAll('.review-row').forEach(r => r.classList.remove('review-row-active'));
 }
+
+// ─── Condition toggle buttons ──────────────────────────────────────────────
+document.querySelectorAll('.diagnose-cond-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.diagnose-cond-btn').forEach(b => b.classList.remove('active-frac', 'active-nonfrac'));
+        if (btn.dataset.val === 'Fractured') {
+            btn.classList.add('active-frac');
+            _diagnoseCondition = 'Fractured';
+        } else {
+            btn.classList.add('active-nonfrac');
+            _diagnoseCondition = 'Non-Fractured';
+        }
+    });
+});
+
+// ─── Submit Diagnose ───────────────────────────────────────────────────────
+document.getElementById('diagnose-submit-btn').addEventListener('click', () => {
+    if (!_diagnoseImageId) return;
+    const submitBtn = document.getElementById('diagnose-submit-btn');
+    const comments  = document.getElementById('diagnose-comments').value.trim();
+    submitBtn.textContent = 'Submitting…';
+    submitBtn.disabled = true;
+
+    fetch(`${API_URL}/submit-diagnosis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            image_id:  _diagnoseImageId,
+            condition: _diagnoseCondition || '',
+            comments:  comments,
+        }),
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) {
+            submitBtn.textContent = 'Error';
+            setTimeout(() => { submitBtn.textContent = 'Submit Diagnose'; submitBtn.disabled = false; }, 2000);
+        } else {
+            submitBtn.textContent = 'Submitted ✓';
+            setTimeout(() => {
+                submitBtn.textContent = 'Submit Diagnose';
+                submitBtn.disabled = false;
+                _loadReviewQueue();
+            }, 1500);
+        }
+    })
+    .catch(() => {
+        submitBtn.textContent = 'Error';
+        setTimeout(() => { submitBtn.textContent = 'Submit Diagnose'; submitBtn.disabled = false; }, 2000);
+    });
+});
 
 // ─── File picker ───────────────────────────────────────────────────────────
 document.getElementById('select-btn').addEventListener('click', () => {
@@ -98,6 +163,42 @@ function _resetZoom() {
     document.getElementById('zoom-label').textContent = '100%';
 }
 
+// ─── Diagnose panel zoom controls ──────────────────────────────────────────
+document.getElementById('diagnose-zoom-slider').addEventListener('input', e => {
+    document.getElementById('diagnose-img').style.transform = `scale(${e.target.value / 100})`;
+    document.getElementById('diagnose-zoom-label').textContent = e.target.value + '%';
+});
+
+document.getElementById('diagnose-zoom-reset').addEventListener('click', _resetDiagnoseZoom);
+
+function _resetDiagnoseZoom() {
+    document.getElementById('diagnose-zoom-slider').value = 100;
+    document.getElementById('diagnose-img').style.transform = 'scale(1)';
+    document.getElementById('diagnose-zoom-label').textContent = '100%';
+}
+
+// ─── Scroll wheel zoom — Assist panel ──────────────────────────────────────
+imageDisplay.addEventListener('wheel', e => {
+    e.preventDefault();
+    const slider = document.getElementById('zoom-slider');
+    const newVal = Math.min(140, Math.max(100, parseInt(slider.value) + (e.deltaY > 0 ? -2 : 2)));
+    slider.value = newVal;
+    document.getElementById('result-img').style.transform = `scale(${newVal / 100})`;
+    document.getElementById('zoom-label').textContent = newVal + '%';
+}, { passive: false });
+
+// ─── Scroll wheel zoom — Diagnose panel ────────────────────────────────────
+document.querySelector('.diagnose-xray').addEventListener('wheel', e => {
+    const img = document.getElementById('diagnose-img');
+    if (img.classList.contains('hidden')) return;
+    e.preventDefault();
+    const slider = document.getElementById('diagnose-zoom-slider');
+    const newVal = Math.min(140, Math.max(100, parseInt(slider.value) + (e.deltaY > 0 ? -2 : 2)));
+    slider.value = newVal;
+    img.style.transform = `scale(${newVal / 100})`;
+    document.getElementById('diagnose-zoom-label').textContent = newVal + '%';
+}, { passive: false });
+
 // ─── File handling → POST /predict ─────────────────────────────────────────
 function handleFile(file) {
     const allowed = ['image/jpeg', 'image/jpg', 'image/png'];
@@ -108,6 +209,7 @@ function handleFile(file) {
 
     _resultData = null;
     _currentFilename = file.name;
+    document.getElementById('send-review-btn').disabled = true;
     showState('loading');
     resetMetrics();
     _resetZoom();
@@ -131,6 +233,7 @@ function handleFile(file) {
 
 // ─── Apply prediction response to UI ──────────────────────────────────────
 function applyPrediction(data) {
+    document.getElementById('send-review-btn').disabled = false;
     const isFrac = data.label === 'Fractured';
     const prob   = Math.round((data.fracture_probability || 0) * 100);
 
@@ -302,6 +405,7 @@ function showError(msg) {
 
 function resetUI() {
     _resultData = null;
+    document.getElementById('send-review-btn').disabled = true;
     showState('empty');
     resetMetrics();
     document.getElementById('view-box').checked = true;
@@ -376,7 +480,8 @@ function _loadReviewQueue() {
 
                 const actionBtn = isDone
                     ? `<button class="review-action-btn btn-diagnosed" disabled>Diagnosed</button>`
-                    : `<button class="review-action-btn btn-review" onclick="openDiagnose(this,'${row.image_id}')">Review</button>`;
+                    : `<button class="review-action-btn btn-review" onclick="openDiagnose(this,'${row.image_id}')">Review</button>
+                       <button class="review-action-btn btn-cancel" onclick="cancelReview(this,'${row.image_id}')">Cancel</button>`;
 
                 queue.insertAdjacentHTML('beforeend', `
                     <div class="review-row ${isDone ? 'review-row-done' : ''}" data-rowid="${row.image_id}">
@@ -390,6 +495,29 @@ function _loadReviewQueue() {
             });
         })
         .catch(() => {});
+}
+
+// ─── Cancel review row ─────────────────────────────────────────────────────
+function cancelReview(btn, imageId) {
+    btn.disabled = true;
+    btn.textContent = '…';
+    fetch(`${API_URL}/cancel-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_id: imageId }),
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.error) {
+            const row = document.querySelector(`.review-row[data-rowid="${imageId}"]`);
+            if (row) row.remove();
+            _loadReviewQueue();
+        } else {
+            btn.disabled = false;
+            btn.textContent = 'Cancel';
+        }
+    })
+    .catch(() => { btn.disabled = false; btn.textContent = 'Cancel'; });
 }
 
 // ─── Health check on load — populate Config device field ──────────────────

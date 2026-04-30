@@ -65,7 +65,6 @@
                         <img id="result-img" alt="Prediction result">
                         <div class="img-badge" id="img-badge">GradCAM · DenseNet-169 · denseblock4</div>
                         <div class="img-id-badge" id="img-id-badge"></div>
-                        <button class="send-review-btn" id="send-review-btn">Send Review</button>
                         <div class="zoom-controls">
                             <span class="zoom-label" id="zoom-label">100%</span>
                             <input type="range" class="zoom-slider" id="zoom-slider" min="100" max="140" value="100" step="1">
@@ -113,6 +112,8 @@
                     <span class="status-model" id="status-model"></span>
                 </div>
 
+                <button class="send-review-btn" id="send-review-btn" disabled>Send Review</button>
+
                 <div class="disclaimer">
                     This prediction supports radiologist review. Clinical judgment required for diagnosis.
                 </div>
@@ -152,13 +153,24 @@
                         <div class="diagnose-xray">
                             <img class="diagnose-xray-img hidden" id="diagnose-img" alt="">
                             <span class="placeholder-text" id="diagnose-placeholder">X-Ray Viewer</span>
+                            <div class="zoom-controls" id="diagnose-zoom-controls">
+                                <span class="zoom-label" id="diagnose-zoom-label">100%</span>
+                                <input type="range" class="zoom-slider" id="diagnose-zoom-slider" min="100" max="140" value="100" step="1">
+                                <button class="zoom-reset" id="diagnose-zoom-reset" title="Reset zoom">↺</button>
+                            </div>
                         </div>
                     </div>
                     <div class="diagnose-controls">
+                        <div class="diagnose-condition">
+                            <span class="diagnose-condition-label">Condition</span>
+                            <div class="diagnose-condition-btns">
+                                <button class="diagnose-cond-btn" id="cond-fractured" data-val="Fractured">FRACTURED</button>
+                                <button class="diagnose-cond-btn" id="cond-nonfractured" data-val="Non-Fractured">NON-FRACTURED</button>
+                            </div>
+                        </div>
                         <button class="btn diagnose-btn">Draw Boxes</button>
-                        <button class="btn diagnose-btn">True Label</button>
-                        <textarea class="diagnose-comments" placeholder="Diagnosis Comments (Optional)"></textarea>
-                        <button class="btn diagnose-submit">Submit Diagnose</button>
+                        <button class="btn diagnose-submit" id="diagnose-submit-btn">Submit Diagnose</button>
+                        <textarea class="diagnose-comments" id="diagnose-comments" placeholder="Diagnosis Comments (Optional)"></textarea>
                     </div>
                 </div>
             </div>
@@ -192,18 +204,17 @@
                     <div class="health-row"><span>Recall</span><span class="alert-amber">71.95% val / 65.57% test</span></div>
                     <div class="health-row"><span>Precision</span><span>72.84% val / 71.43% test</span></div>
                     <div class="health-row"><span>AUC</span><span class="text-teal">0.844 val / 0.847 test</span></div>
-                    <div class="health-row"><span>Threshold</span><span>0.175 (val-optimal)</span></div>
+                    <div class="health-row"><span>Threshold</span><span>0.175 val-optimal · 0.350 test-sweep</span></div>
                     <div class="health-row"><span>Split</span><span class="text-teal">val + test confirmed</span></div>
                 </div>
                 <div class="health-card">
                     <div class="health-card-title">EfficientNet-B3 · F1</div>
-                    <div class="health-row"><span>F1 (Fractured)</span><span class="text-teal">67.07% val</span></div>
-                    <div class="health-row"><span>Recall</span><span class="alert-amber">68.29% val</span></div>
-                    <div class="health-row"><span>Precision</span><span>65.88% val</span></div>
-                    <div class="health-row"><span>AUC</span><span class="text-teal">0.883 val</span></div>
-                    <div class="health-row"><span>Threshold</span><span>0.525 (val-optimal)</span></div>
-                    <div class="health-row"><span>Architecture</span><span>Compound scaling φ=1.2 · 12M params</span></div>
-                    <div class="health-row"><span>Status</span><span class="text-teal">val confirmed · test pending</span></div>
+                    <div class="health-row"><span>F1 (Fractured)</span><span class="text-teal">67.07% val / 56.34% test</span></div>
+                    <div class="health-row"><span>Recall</span><span class="alert-amber">68.29% val / 65.57% test</span></div>
+                    <div class="health-row"><span>Precision</span><span>65.88% val / 49.38% test</span></div>
+                    <div class="health-row"><span>AUC</span><span class="text-teal">0.883 val / 0.818 test</span></div>
+                    <div class="health-row"><span>Threshold</span><span>0.525 val-optimal · 0.325 test-sweep</span></div>
+                    <div class="health-row"><span>Split</span><span class="text-teal">val + test confirmed</span></div>
                 </div>
                 <div class="health-card health-card-wide">
                     <div class="health-card-title">GEL — Gated Ensemble Logic</div>

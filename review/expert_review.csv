@@ -1,3 +1,0 @@
-image_id,gel_probability,gel_label,resnet_probability,densenet_probability,efficientnet_probability,true_label,status,timestamp
-IMG0003308.jpg,0.0067,Non_fractured,0.0035,0.0156,0.0004,Fractured,pending,2026-04-28T00:00:00
-IMG0001768.jpg,0.7804,Fractured,0.7724,0.9693,0.5848,Non_fractured,pending,2026-04-28T00:00:00
