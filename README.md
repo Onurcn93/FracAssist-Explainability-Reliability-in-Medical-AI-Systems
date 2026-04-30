@@ -63,10 +63,10 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 ├── inference/                # FracAssist clinical decision support system
 │   ├── config.py             # Fixed hyperparameters, weight paths, CUDA auto-detect
 │   ├── predict.py            # GEL ensemble + GradCAM + PIL bounding box annotation
-│   └── app.py                # Flask: GET /, GET /health, POST /predict, GET /review-queue, POST /send-review, GET /fractatlas/<filename>
+│   └── app.py                # Flask: GET /, GET /health, POST /predict, GET /fractatlas/<filename>, GET /review-queue, POST /send-review, POST /cancel-review, POST /submit-diagnosis
 ├── index.html                # FracAssist web UI (four tabs: Assist / Expert Review / Model Status / Config)
 ├── style.css                 # Dark theme — bone-gradient plates, teal/red accents
-├── scripts.js                # UI logic — fetch /predict, overlay toggle, drag-drop, zoom, review queue
+├── scripts.js                # UI logic — fetch /predict, overlay toggle, drag-drop, zoom (slider + scroll wheel), review queue, condition selector, submit-diagnosis
 ├── review/                   # Expert review workflow
 │   ├── expert_review.csv     # Review queue — image_id, model probabilities, true_label, status, timestamp
 │   └── images/               # 96px thumbnails generated at send-review time
@@ -723,10 +723,10 @@ YOLOv8m underperforms YOLOv8s by −3.8pp. Larger model overfits on the small da
 A local web app for clinical decision support. Runs entirely offline; no data leaves the machine.
 
 **Tabs:**
-- **Assist** — Upload X-ray, select inference mode, view GradCAM/bounding box overlay, read per-model probability cards, send cases for expert review
-- **Expert Review** — CSV-driven review queue showing true label (from FracAtlas folder), GEL verdict, and per-model probabilities in a 2×2 chip grid; diagnose panel loads full-resolution original for expert annotation
-- **Model Status** — Approved baseline metrics for all four models + GEL ensemble
-- **Config** — Inference hyperparameters and GEL architecture parameters
+- **Assist** — Upload X-ray, select inference mode, view GradCAM/bounding box overlay, read per-model probability cards. Zoom via slider or scroll wheel. Send Review button (enabled after prediction) queues the case for expert annotation.
+- **Expert Review** — CSV-driven review queue (Image ID / Preview / Condition / GEL Verdict / Model Output 2×2 / Status). Cancel removes a row. Diagnose panel loads full-resolution original with scroll/slider zoom; expert selects FRACTURED / NON-FRACTURED condition and submits — updates `true_label` and sets `status=diagnosed` in the queue CSV.
+- **Model Status** — Approved baseline metrics (val + test) for all four models + GEL ensemble
+- **Config** — Inference hyperparameters and GEL architecture parameters (τ, δ, k_low, k_high, F1 anchors)
 
 ```bash
 # Weights required — place in weights/ before starting:
@@ -795,6 +795,8 @@ BVG uses `p_final` — the same OAM-adjusted PDWF output that becomes the fractu
 | `GET` | `/fractatlas/<filename>` | Serve full-resolution FracAtlas image by filename (searches Fractured/ and Non_fractured/) |
 | `GET` | `/review-queue` | Return `review/expert_review.csv` as JSON list |
 | `POST` | `/send-review` | Append inference result to review queue; derives `true_label` from FracAtlas folder; 409 on duplicate |
+| `POST` | `/cancel-review` | Remove a row from the queue CSV by `image_id`; 404 if not found |
+| `POST` | `/submit-diagnosis` | Set `status=diagnosed` and update `true_label` for an `image_id`; 404 if not found |
 
 ---
 
