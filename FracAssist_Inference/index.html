@@ -298,56 +298,56 @@
                         <div class="config-label">ResNet-18 F1 Anchor</div>
                         <div class="config-sub">E6 val F1 — performance weight in BVG &amp; PDWF</div>
                     </div>
-                    <span class="config-val text-teal">0.689</span>
+                    <span class="config-val text-teal" data-gel-key="gel_f1_resnet">0.689</span>
                 </div>
                 <div class="config-row">
                     <div>
                         <div class="config-label">DenseNet-169 F1 Anchor</div>
                         <div class="config-sub">D1 val F1 — performance weight in BVG &amp; PDWF</div>
                     </div>
-                    <span class="config-val text-teal">0.724</span>
+                    <span class="config-val text-teal" data-gel-key="gel_f1_densenet">0.724</span>
                 </div>
                 <div class="config-row">
                     <div>
                         <div class="config-label">EfficientNet-B3 F1 Anchor</div>
                         <div class="config-sub">F1 val F1 — performance weight in BVG &amp; PDWF</div>
                     </div>
-                    <span class="config-val text-teal">0.671</span>
+                    <span class="config-val text-teal" data-gel-key="gel_f1_efficientnet">0.671</span>
                 </div>
                 <div class="config-row">
                     <div>
                         <div class="config-label">BVG Gate Threshold (τ)</div>
                         <div class="config-sub">Classifier consensus below this suppresses YOLO bbox</div>
                     </div>
-                    <span class="config-val">0.35</span>
+                    <span class="config-val" data-gel-key="gel_tau">0.35</span>
                 </div>
                 <div class="config-row">
                     <div>
                         <div class="config-label">OAM Disagreement Limit (δ)</div>
                         <div class="config-sub">Deviation from mean above this flags a model as outlier</div>
                     </div>
-                    <span class="config-val">0.40</span>
+                    <span class="config-val" data-gel-key="gel_disagree_lim">0.40</span>
                 </div>
                 <div class="config-row">
                     <div>
                         <div class="config-label">OAM Penalty — LOW outlier (k_low)</div>
                         <div class="config-sub">Lone no-fracture dissenter against fracture consensus — aggressive suppression</div>
                     </div>
-                    <span class="config-val text-teal">0.10</span>
+                    <span class="config-val text-teal" data-gel-key="gel_penalty_k_low">0.10</span>
                 </div>
                 <div class="config-row">
                     <div>
                         <div class="config-label">OAM Penalty — HIGH outlier (k_high)</div>
                         <div class="config-sub">Lone fracture signal against no-fracture consensus — lenient to preserve fracture signal</div>
                     </div>
-                    <span class="config-val text-teal">0.30</span>
+                    <span class="config-val text-teal" data-gel-key="gel_penalty_k_high">0.30</span>
                 </div>
                 <div class="config-row">
                     <div>
                         <div class="config-label">OAM Penalty — Balanced reference (k_standard)</div>
                         <div class="config-sub">Symmetric baseline — not used in inference, preserved for comparison</div>
                     </div>
-                    <span class="config-val">0.20</span>
+                    <span class="config-val" data-gel-key="gel_penalty_k_standard">0.20</span>
                 </div>
             </div>
         </section>

@@ -1,0 +1,39 @@
+# configs/resnet_E12.yaml
+#
+# ResNet-50 + CAALMIX — largest backbone with full augmentation stack.
+#
+# Ablation question: Can bottleneck depth (ResNet-50, 2048-dim fc) combined
+# with CLAHE + AlbumentationsDelta overcome the small-dataset overfitting
+# that hurt E10? CAALMIX acts as regularisation in addition to data enrichment.
+#
+# Single change vs E10: use_clahe=true, use_albu=true.
+# Same backbone (resnet50), same scheduler, same differential LR.
+#
+# Decision gate:
+#   E12 > E10 → CAALMIX regularisation benefit at depth-50
+#   E12 > E11 → bottleneck capacity adds value when augmentation is matched
+#   E12 > E6  (0.6892) → new champion; update FracAssist_Inference/config.py
+#
+# Run:
+#   python main.py --config configs/resnet_E12.yaml --task E12
+
+E12:
+  experiment_id       : "E12"
+  task                : "classify"
+  resnet_variant      : "resnet50"
+  data_dir            : "data/dataset_cls"
+  epochs              : 50
+  batch_size          : 32
+  img_size            : 224
+  device              : "0"
+  dropout_p           : 0.0
+  weight_mult         : 0.5
+  loss                : "weighted_ce"
+  scheduler           : "plateau"
+  lr_backbone         : 1.0e-5
+  lr_head             : 1.0e-3
+  val_threshold       : 0.5
+  early_stop_patience : 15
+  use_clahe           : true
+  use_albu            : true
+  plot                : true

@@ -1,8 +1,8 @@
 """
-inference/app.py — FracAssist Flask server.
+FracAssist_Inference/app.py — FracAssist Flask server.
 
 Run from repo root:
-    python inference/app.py
+    python "FracAssist_Inference/app.py"
 
 Routes:
     GET  /         → serve index.html
@@ -20,18 +20,19 @@ from flask import Flask, jsonify, make_response, request, send_file
 from flask_cors import CORS
 from PIL import Image
 
-# Ensure both inference/ and repo root are on path so all imports resolve
+# Ensure both FracAssist_Inference/ and repo root are on sys.path so all imports resolve
 _INFERENCE_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT     = os.path.dirname(_INFERENCE_DIR)
 sys.path.insert(0, _INFERENCE_DIR)
 sys.path.insert(0, _REPO_ROOT)
 
-from config import CONFIG
+from config import CONFIG, GEL_CONFIG
 from predict import load_models, predict as run_predict
 
 _ROOT = _REPO_ROOT
 
-app = Flask(__name__, static_folder=_ROOT, static_url_path='')
+# static_folder points to FracAssist_Inference/ — serves index.html, scripts.js, style.css
+app = Flask(__name__, static_folder=_INFERENCE_DIR, static_url_path='')
 CORS(app)  # Required: index.html may be opened as file:// or cross-origin
 
 _ALLOWED = {".jpg", ".jpeg", ".png"}
@@ -58,6 +59,11 @@ def health():
         "models_loaded": True,
         "device": CONFIG["device"],
     })
+
+
+@app.route("/api/gel-config")
+def gel_config_endpoint():
+    return jsonify(GEL_CONFIG)
 
 
 _FRACTATLAS_DIRS   = [

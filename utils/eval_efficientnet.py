@@ -14,12 +14,13 @@ import argparse
 import re
 from pathlib import Path
 
+import cv2
 import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.models as tv_models
 import torchvision.transforms as transforms
-from PIL import ImageFile
+from PIL import Image, ImageFile
 from sklearn.metrics import (
     accuracy_score, f1_score, precision_score, recall_score, roc_auc_score,
 )
@@ -40,6 +41,9 @@ IMAGENET_STD  = [0.229, 0.224, 0.225]
 
 CHECKPOINT_DIRS = [Path("weights"), Path("colab_results")]
 
+# Checkpoints trained with CLAHE on ALL splits — must use CLAHE at eval time.
+_CLAHE_CKPTS = {"F2_best", "F3_best", "F4_best"}
+
 # ── Helpers ───────────────────────────────────────────────────────────── #
 
 def _infer_dropout(state_dict: dict) -> float:
@@ -52,21 +56,33 @@ def _infer_dropout(state_dict: dict) -> float:
 
 def _build_model(dropout_p: float, device: torch.device) -> nn.Module:
     model   = tv_models.efficientnet_b3(weights=None)
-    in_feat = model.classifier[1].in_features  # 1536
+    in_feat: int = model.classifier[1].in_features  # type: ignore[union-attr]
     if dropout_p > 0.0:
-        model.classifier = nn.Sequential(nn.Dropout(p=dropout_p), nn.Linear(in_feat, 2))
+        model.classifier = nn.Sequential(nn.Dropout(p=dropout_p), nn.Linear(in_feat, 2))  # type: ignore[assignment]
     else:
-        model.classifier = nn.Linear(in_feat, 2)
+        model.classifier = nn.Linear(in_feat, 2)  # type: ignore[assignment]
     return model.to(device)
 
 
-def _get_transform() -> transforms.Compose:
-    return transforms.Compose([
+class _CLAHETransform:
+    def __call__(self, img: Image.Image) -> Image.Image:
+        clahe    = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        gray     = np.array(img.convert("L"), dtype=np.uint8)
+        enhanced = clahe.apply(gray)
+        return Image.fromarray(enhanced).convert("RGB")
+
+
+def _get_transform(clahe: bool = False) -> transforms.Compose:
+    steps = []
+    if clahe:
+        steps.append(_CLAHETransform())
+    steps += [
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.Grayscale(num_output_channels=3),
         transforms.ToTensor(),
         transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
-    ])
+    ]
+    return transforms.Compose(steps)
 
 
 def _collect_probs(model, loader, device):
@@ -110,12 +126,6 @@ def main(data_dir: Path = DATA_DIR):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    tf      = _get_transform()
-    dataset = ImageFolder(root=str(data_dir), transform=tf)
-    loader  = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
-    frac_idx = dataset.class_to_idx[FRAC_CLASS]
-    print(f"Split: {data_dir}  |  {len(dataset)} images  |  Fractured idx: {frac_idx}\n")
-
     # Collect only F-series checkpoints
     _KEEP = re.compile(r'^[Ff]\d', re.IGNORECASE)
     ckpt_paths = []
@@ -132,12 +142,17 @@ def main(data_dir: Path = DATA_DIR):
 
     rows = []
     for ckpt_path in ckpt_paths:
-        print(f"Evaluating {ckpt_path} ...", end=" ", flush=True)
+        needs_clahe = ckpt_path.stem in _CLAHE_CKPTS
+        clahe_tag   = " [CLAHE]" if needs_clahe else ""
+        print(f"Evaluating {ckpt_path.name}{clahe_tag} ...", end=" ", flush=True)
 
         try:
             ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
         except Exception:
             ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+
+        # Prefer flag saved in checkpoint; fall back to filename-based detection
+        needs_clahe = ckpt.get("use_clahe", needs_clahe)
 
         state     = ckpt.get("model_state_dict", ckpt)
         dropout_p = _infer_dropout(state)
@@ -146,6 +161,11 @@ def main(data_dir: Path = DATA_DIR):
         model.eval()
 
         saved_thresh = float(ckpt.get("val_threshold", 0.5))
+
+        tf      = _get_transform(clahe=needs_clahe)
+        dataset = ImageFolder(root=str(data_dir), transform=tf)
+        loader  = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
+        frac_idx = dataset.class_to_idx[FRAC_CLASS]
 
         labels, probs = _collect_probs(model, loader, device)
 
@@ -163,6 +183,7 @@ def main(data_dir: Path = DATA_DIR):
         rows.append({
             "exp":    exp_id,
             "source": source,
+            "clahe":  needs_clahe,
             "thresh": use_thresh,
             "f1":     m_use["f1"],
             "recall": m_use["recall"],
@@ -174,19 +195,21 @@ def main(data_dir: Path = DATA_DIR):
 
     rows.sort(key=lambda r: r["f1"], reverse=True)
 
-    print("\n" + "=" * 85)
-    print(f"{'Rank':<5} {'Experiment':<30} {'Src':<6} {'Thresh':<7} "
+    print("\n" + "=" * 92)
+    print(f"{'Rank':<5} {'Experiment':<30} {'Src':<6} {'CLAHE':<6} {'Thresh':<7} "
           f"{'F1':>6} {'Recall':>7} {'Prec':>7} {'Acc':>7} {'AUC':>7}")
-    print("-" * 85)
+    print("-" * 92)
     for i, r in enumerate(rows, 1):
         print(
-            f"{i:<5} {r['exp']:<30} {r['source']:<6} {r['thresh']:<7.3f} "
-            f"{r['f1']:>6.4f} {r['recall']:>7.4f} {r['prec']:>7.4f} "
+            f"{i:<5} {r['exp']:<30} {r['source']:<6} {'yes' if r['clahe'] else 'no':<6} "
+            f"{r['thresh']:<7.3f} {r['f1']:>6.4f} {r['recall']:>7.4f} {r['prec']:>7.4f} "
             f"{r['acc']:>7.4f} {r['auc']:>7.4f}"
         )
-    print("=" * 85)
-    print(f"\nChampion: {rows[0]['exp']} ({rows[0]['source']})  "
-          f"F1={rows[0]['f1']:.4f}  thresh={rows[0]['thresh']:.3f}")
+    print("=" * 92)
+    champion = rows[0]
+    print(f"\nChampion: {champion['exp']} ({champion['source']})"
+          f"{'  [CLAHE]' if champion['clahe'] else ''}  "
+          f"F1={champion['f1']:.4f}  thresh={champion['thresh']:.3f}")
 
 
 if __name__ == "__main__":

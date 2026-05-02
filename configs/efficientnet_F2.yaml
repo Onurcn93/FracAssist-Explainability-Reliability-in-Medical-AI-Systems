@@ -1,0 +1,43 @@
+# configs/efficientnet_F2.yaml
+#
+# EfficientNet-B3 F2 — CLAHE preprocessing ablation.
+#
+# Ablation question: Does local contrast enhancement (CLAHE) benefit EfficientNet-B3
+# the way it benefits ResNet-18 (E6 +3.11pp), or does compound scaling handle
+# low-contrast X-rays implicitly (as DenseNet-169's dense connections do)?
+#
+# All settings identical to F1 baseline.
+# Single change: use_clahe=true adds CLAHETransform to ALL splits (train + val + test).
+# This mirrors E5 (ResNet CLAHE-only) and D3 (DenseNet CLAHE-only) exactly.
+#
+# Expected outcomes:
+#   F2 > F1 → EfficientNet benefits from explicit contrast preprocessing (like ResNet)
+#   F2 < F1 → EfficientNet self-regularises contrast (like DenseNet) — compound scaling sufficient
+#   F2 ≈ F1 → Neutral; CLAHE is neither helpful nor harmful
+#
+# Decision gate:
+#   F2 > F1 → proceed to F3 (CLAHE + AlbumentationsDelta, mirrors E6)
+#   F2 < F1 → skip F3/F4; CLAHE is harmful — consistent with DenseNet finding
+#   Update inference/config.py only if F2 beats F1 on val F1.
+#
+# Run:
+#   python main.py --config configs/efficientnet_F2.yaml --task F2
+
+F2:
+  experiment_id       : "F2"
+  task                : "classify_efficientnet"
+  data_dir            : "data/dataset_cls"
+  epochs              : 50
+  batch_size          : 32
+  img_size            : 224
+  device              : "0"
+  dropout_p           : 0.0
+  weight_mult         : 0.5
+  loss                : "weighted_ce"
+  scheduler           : "plateau"
+  lr_backbone         : 1.0e-5
+  lr_head             : 1.0e-3
+  val_threshold       : 0.5
+  early_stop_patience : 15
+  use_clahe           : true
+  plot                : true

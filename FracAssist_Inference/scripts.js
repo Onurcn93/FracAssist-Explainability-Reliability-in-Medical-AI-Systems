@@ -532,3 +532,16 @@ fetch(`${API_URL}/health`)
     .catch(() => {
         // Server not running — silent until user tries to predict
     });
+
+// ─── GEL config on load — populate dynamic config panel values ────────────
+fetch(`${API_URL}/api/gel-config`)
+    .then(r => r.json())
+    .then(cfg => {
+        document.querySelectorAll('[data-gel-key]').forEach(el => {
+            const val = cfg[el.getAttribute('data-gel-key')];
+            if (val !== undefined) el.textContent = val;
+        });
+    })
+    .catch(() => {
+        // Server not running — static fallback values in HTML remain
+    });

@@ -22,6 +22,7 @@ Run from repo root:
 """
 
 import csv
+import sys
 from pathlib import Path
 
 import cv2
@@ -43,6 +44,12 @@ REVIEW_DIR = REPO_ROOT / "review"
 DATA_ROOT  = REPO_ROOT / "data" / "dataset_cls"
 WEIGHT_DIR = REPO_ROOT / "weights"
 
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from gel.gel_config import GEL_CONFIG    # noqa: E402
+from gel.gel_pipeline import apply_gel   # noqa: E402
+
 # Champion weights
 RESNET_WEIGHTS       = WEIGHT_DIR / "E6_best.pth"        # CAALMIX champion (+3.11pp vs E4a)
 DENSENET_WEIGHTS     = WEIGHT_DIR / "D1_best.pth"
@@ -61,14 +68,10 @@ DENSENET_THRESHOLD     = 0.175   # D1 val-optimal
 EFFICIENTNET_THRESHOLD = 0.525   # F1 val-optimal
 GEL_THRESHOLD          = 0.525   # GEL val-optimal
 
-# GEL PDWF anchors — val F1 for each champion
-GEL_F1_RESNET       = 0.689   # E6 val F1 (CAALMIX champion)
-GEL_F1_DENSENET     = 0.724   # D1 val F1
-GEL_F1_EFFICIENTNET = 0.671   # F1 val F1
-
-GEL_DISAGREE_LIM = 0.40
-GEL_PENALTY_K_LOW  = 0.10
-GEL_PENALTY_K_HIGH = 0.30
+# GEL hyperparameters — sourced from gel/gel_config.py
+GEL_F1_RESNET       = GEL_CONFIG["gel_f1_resnet"]
+GEL_F1_DENSENET     = GEL_CONFIG["gel_f1_densenet"]
+GEL_F1_EFFICIENTNET = GEL_CONFIG["gel_f1_efficientnet"]
 
 # ── CLAHE preprocessing (E6 was trained with this on all splits) ───────── #
 
@@ -155,31 +158,6 @@ def load_efficientnet(device):
     return m.to(device), frac_idx
 
 
-# ── GEL (matches eval_gel.py _apply_gel exactly) ──────────────────────── #
-
-def apply_gel(p_r, p_d, p_e=None):
-    use_e = p_e is not None
-    if use_e:
-        total_f1 = GEL_F1_RESNET + GEL_F1_DENSENET + GEL_F1_EFFICIENTNET
-        probs    = [p_r, p_d, p_e]
-        f1s      = [GEL_F1_RESNET, GEL_F1_DENSENET, GEL_F1_EFFICIENTNET]
-    else:
-        total_f1 = GEL_F1_RESNET + GEL_F1_DENSENET
-        probs    = [p_r, p_d]
-        f1s      = [GEL_F1_RESNET, GEL_F1_DENSENET]
-
-    rcs = [np.full_like(p, f1 / total_f1) for p, f1 in zip(probs, f1s)]
-    mu  = sum(probs) / len(probs)
-    new_rcs = []
-    for p, rc in zip(probs, rcs):
-        outlier = np.abs(p - mu) > GEL_DISAGREE_LIM
-        k       = np.where(p < mu, GEL_PENALTY_K_LOW, GEL_PENALTY_K_HIGH)
-        new_rcs.append(np.where(outlier, rc * k, rc))
-
-    total_rc = sum(new_rcs)
-    return sum(p * rc for p, rc in zip(probs, new_rcs)) / total_rc
-
-
 # ── Inference helpers ──────────────────────────────────────────────────── #
 
 def _collect_probs(model, frac_idx, loader, device):
@@ -216,7 +194,7 @@ def run_split(split_name, resnet, r_fi, densenet, d_fi, efficientnet, e_fi, devi
     p_d = _collect_probs(densenet, d_fi, loader_std, device)
     p_e = _collect_probs(efficientnet, e_fi, loader_std, device) if efficientnet is not None else None
 
-    p_gel = apply_gel(p_r, p_d, p_e)
+    p_gel, _ = apply_gel(p_r, p_d, p_e)
 
     rows = []
     for i, (img_id, true_label) in enumerate(zip(image_ids, true_labels)):

@@ -1,0 +1,38 @@
+# configs/resnet_E9.yaml
+#
+# ResNet-34 baseline — mirrors E4a_m050 exactly.
+#
+# Ablation question: Does doubling ResNet depth (18 → 34 layers, same 512-dim fc)
+# improve fracture classification, or does the small dataset (~700 fractured images)
+# prevent the extra capacity from generalising?
+#
+# Single change vs E4a: resnet_variant=resnet34.
+# No CLAHE, no augmentation deltas, plateau scheduler, w=0.5.
+#
+# Decision gate:
+#   E9 > E4a (0.6581) → depth helps; proceed to E10 (ResNet-50)
+#   E9 < E4a          → diminishing returns from depth at this dataset size
+#   E9 > E6  (0.6892) → new champion; update inference/config.py
+#
+# Run:
+#   python main.py --config configs/resnet_E9.yaml --task E9
+
+E9:
+  experiment_id       : "E9"
+  task                : "classify"
+  resnet_variant      : "resnet34"
+  data_dir            : "data/dataset_cls"
+  epochs              : 50
+  batch_size          : 32
+  img_size            : 224
+  device              : "0"
+  dropout_p           : 0.0
+  weight_mult         : 0.5
+  loss                : "weighted_ce"
+  scheduler           : "plateau"
+  lr_backbone         : 1.0e-5
+  lr_head             : 1.0e-3
+  val_threshold       : 0.5
+  early_stop_patience : 15
+  use_clahe           : false
+  plot                : true

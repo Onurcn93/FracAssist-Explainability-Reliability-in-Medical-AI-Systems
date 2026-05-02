@@ -18,9 +18,10 @@ annotated for classification, localization, and segmentation.
 |-------|-------|------|----------------|--------|
 | 1 | ResNet-18 | Binary fracture classification (E-series) | F1 (fractured class) | Complete |
 | 1 | ResNet-18 | CAALMIX augmentation ablation (E5/E6/E7/E8) | F1 (fractured class) | Complete — E6 champion (68.9%); E8 isolates XRayAugMix |
+| 1 | ResNet-18 | Depth-scaling ablation (E9–E12) | F1 (fractured class) | E9 done (ResNet-34, 67.1%); E10/E11/E12 running |
 | 1 | DenseNet-169 | Binary fracture classification (D-series) | F1 (fractured class) | Complete — D1 champion (72.4%) |
 | 1 | DenseNet-169 | CAALMIX augmentation ablation (D3/D4/D5) | F1 (fractured class) | D3 done (CLAHE hurts −6.2pp); D4/D5 skipped |
-| 1 | EfficientNet-B3 | Binary fracture classification (F-series) | F1 (fractured class) | Complete — F1 baseline (67.1% val / 56.3% test) |
+| 1 | EfficientNet-B3 | Binary fracture classification (F-series) | F1 (fractured class) | F1 baseline (67.1% val / 56.3% test); F2 CLAHE confirms CLAHE hurts (−4.0pp) |
 | 2 | YOLOv8s / YOLOv8s-seg / YOLOv8m | Localization & segmentation | mAP@0.5 | Complete |
 | 3 | CBM + Prototypes + Counterfactuals | XAI — three-pillar architecture | Task-specific | Pending |
 
@@ -40,13 +41,18 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 │   ├── resnet_E5.yaml        # E5 CAALMIX step 1 — CLAHE only (done, F1=66.7%)
 │   ├── resnet_E6.yaml        # E6 CAALMIX step 2 — +AlbumentationsDelta (done, F1=68.9% ★)
 │   ├── resnet_E7.yaml        # E7 CAALMIX step 3 — +XRayAugMix (done, F1=65.2%, regressed)
-│   ├── resnet_E8.yaml        # E8 XRayAugMix standalone — no CLAHE, no Albu (done, F1=63.6%, isolates XRayAugMix harm)
+│   ├── resnet_E8.yaml        # E8 XRayAugMix standalone — no CLAHE, no Albu (done, F1=63.6%)
+│   ├── resnet_E9.yaml        # E9 ResNet-34 standard (done, F1=67.1%; < E6)
+│   ├── resnet_E10.yaml       # E10 ResNet-50 standard (running)
+│   ├── resnet_E11.yaml       # E11 ResNet-34 + CAALMIX (queued)
+│   ├── resnet_E12.yaml       # E12 ResNet-50 + CAALMIX (queued)
 │   ├── densenet_D1.yaml      # D1 DenseNet-169 baseline (flat LR, no dropout)
 │   ├── densenet_D2.yaml      # D2 DenseNet-169 cosine warmup + dropout (worse — D1 is champion)
-│   ├── densenet_D3.yaml      # D3 CAALMIX step 1 — CLAHE only (done, F1=66.2%, −6.2pp vs D1 — CLAHE hurts DenseNet)
-│   ├── densenet_D4.yaml      # D4 CAALMIX step 2 — +AlbumentationsDelta (skipped — D3 regression unrecoverable)
-│   ├── densenet_D5.yaml      # D5 CAALMIX step 3 — +XRayAugMix (skipped — D3 regression unrecoverable)
-│   ├── efficientnet_F1.yaml  # F1 EfficientNet-B3 baseline (compound scaling, plateau scheduler)
+│   ├── densenet_D3.yaml      # D3 CAALMIX step 1 — CLAHE only (done, F1=66.2%, −6.2pp vs D1)
+│   ├── densenet_D4.yaml      # D4 CAALMIX step 2 — +AlbumentationsDelta (skipped)
+│   ├── densenet_D5.yaml      # D5 CAALMIX step 3 — +XRayAugMix (skipped)
+│   ├── efficientnet_F1.yaml  # F1 EfficientNet-B3 baseline (67.1% val)
+│   ├── efficientnet_F2.yaml  # F2 EfficientNet-B3 + CLAHE (done, 63.1%, −4.0pp; F3/F4 skipped)
 │   ├── yolo_baseline.yaml    # Original Y0 runs (fractured-only, mixed optimizers)
 │   ├── yolo_Y0.yaml          # Three-way reproduction: Y0A / Y0B / Y0C
 │   ├── yolo_Y1.yaml          # Extended training: Y1A (patience=10) / Y1B (patience=50)
@@ -54,43 +60,45 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 │   ├── yolo_Y3.yaml          # Resolution ablation: imgsz=800, batch=8 (VRAM limit)
 │   ├── yolo_Y4.yaml          # Capacity ablation: YOLOv8m (25.9M params)
 │   └── yolo_Y5.yaml          # Negative sampling ablation: 1:1 ratio
+├── gel/                      # GEL framework — single source of truth
+│   ├── __init__.py
+│   ├── gel_config.py         # All GEL hyperparameters (τ, δ, k_low, k_high, F1 anchors)
+│   └── gel_pipeline.py       # Canonical apply_gel() — RC init → OAM → PDWF → BVG
+├── FracAssist_Inference/     # FracAssist clinical decision support system
+│   ├── app.py                # Flask server — all routes
+│   ├── config.py             # Weight paths, inference thresholds, GEL config (imports gel/)
+│   ├── predict.py            # GEL orchestration + GradCAM + PIL bbox annotation
+│   ├── index.html            # Web UI — four tabs: Assist / Expert Review / Model Status / Config
+│   ├── scripts.js            # UI logic — fetch /predict, overlay toggle, drag-drop, zoom, review
+│   └── style.css             # Dark theme — bone-gradient plates, teal/red accents
 ├── data/                     # Data preparation scripts
 │   ├── prepare_classification.py  # Builds ImageFolder split dirs for ResNet/DenseNet
 │   └── prepare_yolo.py            # Builds YOLO detection / segmentation datasets
 ├── models/
-│   ├── classification/       # ResNet-18 (E-series), DenseNet-169 (D-series), EfficientNet-B3 (F-series)
+│   ├── classification/       # ResNet-18/34/50 (E-series), DenseNet-169 (D-series), EfficientNet-B3 (F-series)
 │   └── yolo/                 # YOLO localization & segmentation (Y-series)
-├── inference/                # FracAssist clinical decision support system
-│   ├── config.py             # Fixed hyperparameters, weight paths, CUDA auto-detect
-│   ├── predict.py            # GEL ensemble + GradCAM + PIL bounding box annotation
-│   └── app.py                # Flask: GET /, GET /health, POST /predict, GET /fractatlas/<filename>, GET /review-queue, POST /send-review, POST /cancel-review, POST /submit-diagnosis
-├── index.html                # FracAssist web UI (four tabs: Assist / Expert Review / Model Status / Config)
-├── style.css                 # Dark theme — bone-gradient plates, teal/red accents
-├── scripts.js                # UI logic — fetch /predict, overlay toggle, drag-drop, zoom (slider + scroll wheel), review queue, condition selector, submit-diagnosis
-├── review/                   # Expert review workflow
-│   ├── expert_review.csv     # Review queue — image_id, model probabilities, true_label, status, timestamp
-│   └── images/               # 96px thumbnails generated at send-review time
-├── xai/                      # XAI pillar implementations (Phase 3 — pending)
+├── review/                   # Expert review workflow + per-image prediction CSVs
+│   ├── expert_review.csv         # Review queue — image_id, model probabilities, true_label, status, timestamp
+│   ├── generate_predictions.py   # Writes train/val/test/all.csv with all model probabilities
+│   ├── train.csv / val.csv / test.csv / all.csv  # Per-split prediction CSVs (generated)
+│   └── images/                   # 96px thumbnails (generated at send-review time, gitignored)
 ├── utils/
 │   ├── logger.py             # Experiment logging
 │   ├── plot.py               # Training curves, metric plots
 │   ├── gradcam.py            # GradCAM — compute_overlay / to_base64 / save
 │   ├── augmentations.py      # CAALMIX augmentation blocks — AlbumentationsDelta, XRayAugMix
-│   ├── eval_resnet.py        # Evaluate all ResNet-18 checkpoints on val/test set
+│   ├── eval_resnet.py        # Evaluate all ResNet checkpoints on val/test set
 │   ├── eval_densenet.py      # Evaluate all DenseNet-169 checkpoints on val/test set
 │   ├── eval_efficientnet.py  # Evaluate all EfficientNet-B3 checkpoints on val/test set
 │   └── eval_gel.py           # Evaluate GEL ensemble on val/test — threshold sweep + baselines
 ├── results/                  # Saved metrics and plots
-│   ├── experiments_yolo.csv      # All YOLO experiments — hyperparams + metrics
-│   ├── experiments_resnet.csv    # All ResNet-18 experiments — hyperparams + metrics
-│   ├── experiments_densenet.csv      # All DenseNet-169 experiments — hyperparams + metrics
-│   ├── experiments_efficientnet.csv  # All EfficientNet-B3 experiments — hyperparams + metrics
+│   ├── experiments_yolo.csv
+│   ├── experiments_resnet.csv
+│   ├── experiments_densenet.csv
+│   ├── experiments_efficientnet.csv
 │   ├── gel_eval_results.txt          # GEL evaluation output — both splits, baselines vs ensemble
 │   └── plots/                    # Training curves (gitignored)
-├── review/                   # Expert review workflow + per-image prediction CSVs
-│   ├── expert_review.csv         # Review queue — image_id, model probabilities, true_label, status, timestamp
-│   ├── images/                   # 96px thumbnails (generated at send-review time, gitignored)
-│   └── generate_predictions.py   # Writes train/val/test/all.csv with all model probabilities
+├── xai/                      # XAI pillar implementations (Phase 3 — pending)
 └── weights/                  # Saved model weights (gitignored)
 ```
 
@@ -114,7 +122,9 @@ pip install -r requirements.txt
 | YOLOv8s-seg | Fracture segmentation | 2 |
 | YOLOv8m | Fracture localization (detect) — capacity ablation | 2 |
 | YOLOv8m-seg | Fracture segmentation — capacity ablation | 2 |
-| ResNet-18 | Binary classification (E-series) | 1 |
+| ResNet-18 | Binary classification (E-series E4–E8) | 1 |
+| ResNet-34 | Binary classification (E-series E9, E11) — depth scaling | 1 |
+| ResNet-50 | Binary classification (E-series E10, E12) — depth scaling | 1 |
 | DenseNet-169 | Binary classification (D-series) | 1 |
 | EfficientNet-B3 | Binary classification (F-series) — compound scaling | 1 |
 | CBM / Prototypes / Counterfactuals | XAI explainability | 3 |
@@ -222,12 +232,19 @@ python main.py --config configs/resnet_E6.yaml --task E6   # +AlbumentationsDelt
 python main.py --config configs/resnet_E7.yaml --task E7   # +XRayAugMix
 
 # ResNet-18 isolation experiment
-python main.py --config configs/resnet_E8.yaml --task E8   # XRayAugMix standalone (no CLAHE, no Albu)
+python main.py --config configs/resnet_E8.yaml --task E8   # XRayAugMix standalone
+
+# Depth-scaling ablation (E9→E10→E11→E12 sequentially)
+python main.py --config configs/resnet_E9.yaml  --task E9   # ResNet-34 standard (done)
+python main.py --config configs/resnet_E10.yaml --task E10  # ResNet-50 standard
+python main.py --config configs/resnet_E11.yaml --task E11  # ResNet-34 + CAALMIX
+python main.py --config configs/resnet_E12.yaml --task E12  # ResNet-50 + CAALMIX
 ```
 
 ```bash
 # EfficientNet-B3 (F-series)
 python main.py --config configs/efficientnet_F1.yaml --task F1   # compound scaling baseline
+python main.py --config configs/efficientnet_F2.yaml --task F2   # +CLAHE (done, hurts −4.0pp)
 ```
 
 ```bash
@@ -248,7 +265,7 @@ python models/yolo/evaluate.py \
     --task    detect \
     --imgsz   600
 
-# ResNet-18 — evaluate all checkpoints, ranked by F1
+# ResNet — evaluate all checkpoints, ranked by F1
 python utils/eval_resnet.py              # test set (default)
 python utils/eval_resnet.py --split val  # val set
 
@@ -262,6 +279,9 @@ python utils/eval_efficientnet.py --split val  # val set
 
 # GEL — evaluate ensemble on both splits (val then test, val-optimal threshold transferred)
 python utils/eval_gel.py
+
+# Per-image predictions for all splits
+python review/generate_predictions.py
 ```
 
 All eval scripts perform a post-hoc threshold sweep (0.05–0.95, step 0.025) and report
@@ -269,8 +289,8 @@ per-model baselines alongside the ensemble. Use `--split val` for tuning; `--spl
 for final reporting. `eval_gel.py` always runs both splits to enable val→test threshold transfer.
 
 > **Note — CAALMIX checkpoints:** `eval_resnet.py` auto-detects CLAHE requirements per
-> checkpoint (E5/E6/E7 → CLAHE applied; E4a/E8 → standard transforms). Results match
-> the training-log sweep.
+> checkpoint (E5/E6/E7/E11/E12 → CLAHE applied; E4/E8/E9/E10 → standard transforms).
+> Results match the training-log sweep.
 
 ### Config format — classification
 
@@ -295,7 +315,7 @@ E4e:
   plot           : true
 ```
 
-**CAALMIX augmentation keys** (E5/E6/E7 and D3/D4/D5):
+**CAALMIX augmentation keys** (E5/E6/E7/E8/E11/E12 and D3/D4/D5/F2):
 
 ```yaml
 E6:
@@ -315,6 +335,31 @@ E6:
   use_albu            : true   # AlbumentationsDelta applied to TRAIN only
   use_augmix          : false  # XRayAugMix applied to TRAIN only (E7/D5 only)
   early_stop_patience : 15     # stop if no val F1 gain for N epochs; 0 = disabled
+  plot                : true
+```
+
+**Depth-scaling keys** (E9/E10/E11/E12 — adds `resnet_variant`):
+
+```yaml
+E9:
+  experiment_id       : "E9"
+  task                : "classify"
+  resnet_variant      : "resnet34"   # "resnet34" or "resnet50"; default is "resnet18"
+  data_dir            : "data/dataset_cls"
+  epochs              : 50
+  batch_size          : 32
+  img_size            : 224
+  device              : "0"
+  dropout_p           : 0.0
+  weight_mult         : 0.5
+  loss                : "weighted_ce"
+  scheduler           : "plateau"
+  lr_backbone         : 1.0e-5
+  lr_head             : 1.0e-3
+  val_threshold       : 0.5
+  early_stop_patience : 15
+  use_clahe           : false  # true for E11/E12
+  use_albu            : false  # true for E11/E12
   plot                : true
 ```
 
@@ -345,9 +390,9 @@ F1:
   plot                : true
 ```
 
-After training, update `inference/config.py`:
+After training, update `FracAssist_Inference/config.py`:
 - `"efficientnet_threshold"` → val_threshold from checkpoint
-- `"gel_f1_efficientnet"` → val F1 from `eval_efficientnet.py --split val`
+- `"gel_f1_efficientnet"` in `gel/gel_config.py` → val F1 from `eval_efficientnet.py --split val`
 
 ### Config format — DenseNet-169
 
@@ -506,9 +551,41 @@ TTA tested and rejected on all experiments (consistent negative results, −1 to
 
 Key findings:
 - CLAHE (E5) provides a moderate +0.9pp gain. The primary gain comes from AlbumentationsDelta (E6, +2.2pp over E5).
-- XRayAugMix (E7) **regresses** −3.7pp vs E6. E8 (XRayAugMix standalone, no CLAHE, no Albu) confirms the regression is intrinsic to XRayAugMix — not a CLAHE conflict artifact. E8 scores −2.2pp vs E4a baseline, ruling out pipeline-order confounds.
-- E7 (65.2%) > E8 (63.6%): CLAHE+Albu context partially offsets XRayAugMix damage — geometric augmentation provides countervailing regularization.
+- XRayAugMix (E7) **regresses** −3.7pp vs E6. E8 (XRayAugMix standalone, no CLAHE, no Albu) confirms the regression is intrinsic to XRayAugMix — not a CLAHE conflict artifact.
+- E7 (65.2%) > E8 (63.6%): CLAHE+Albu context partially offsets XRayAugMix damage.
 - AUC peaks at E6 (0.889). XRayAugMix regresses AUC in both E7 and E8.
+
+---
+
+### Depth-Scaling Ablation — ResNet-34 / ResNet-50 (E9–E12)
+
+Full 3×2 matrix: three backbone depths × two augmentation conditions (standard vs CAALMIX).
+All runs: weight_mult=0.5, plateau scheduler, no dropout, differential LR (backbone 1e-5 / head 1e-3), early stop patience=15, seed=42.
+
+| | Standard | CAALMIX (CLAHE + AlbumentationsDelta) |
+|---|---|---|
+| ResNet-18 | E4a — 65.8% | **E6 — 68.9% ★ champion** |
+| ResNet-34 | E9 — 67.1% | E11 — pending |
+| ResNet-50 | E10 — pending | E12 — pending |
+
+#### Results (Val set — post-training threshold sweep)
+
+| Experiment | Backbone | Pipeline | F1 | Recall | Precision | AUC | Threshold | Runtime | Stopped at |
+|------------|----------|----------|----|--------|-----------|-----|-----------|---------|------------|
+| E4a (reference) | ResNet-18 | Standard | 65.8% | 64.6% | 67.1% | 0.883 | 0.375 | — | ep20 |
+| **E6 ★ (reference)** | ResNet-18 | CAALMIX | **68.9%** | 62.2% | 77.3% | 0.889 | 0.525 | 31m15s | ep30 |
+| E9 | ResNet-34 | Standard | 67.1% | 64.6% | 69.7% | 0.885 | 0.500 | 16m57s | ep20 (best ep5) |
+| E10 | ResNet-50 | Standard | pending | — | — | — | — | — | — |
+| E11 | ResNet-34 | CAALMIX | pending | — | — | — | — | — | — |
+| E12 | ResNet-50 | CAALMIX | pending | — | — | — | — | — | — |
+
+**E9 key findings:**
+- ResNet-34 standard (67.1%) beats ResNet-18 standard baseline (65.8%, +1.3pp) — depth helps marginally.
+- ResNet-34 standard (67.1%) does **not** beat ResNet-18 CAALMIX champion E6 (68.9%, −1.8pp) — augmentation outweighs depth.
+- Best checkpoint at epoch 5; early-stopped epoch 20 (patience=15) — deeper model overfits more quickly on small dataset.
+- TTA gain +0.86pp (skip — consistent with all models, never used in inference).
+
+**Decision gate for E10–E12:** any experiment exceeding E6 (68.9% val F1) becomes the new ResNet champion and triggers an update to `FracAssist_Inference/config.py` (`resnet_weights`, `resnet_threshold`) and `gel/gel_config.py` (`gel_f1_resnet`).
 
 ---
 
@@ -540,10 +617,10 @@ DenseNet-169 (ImageNet pretrained), full fine-tune, Adam. Same ImageFolder split
 
 Key findings:
 - D1 beats ResNet-18 E4a by +6.6pp F1 on val (72.4% vs 65.8%) and +5.2pp on test (68.4% vs 63.2%).
-- D2's cosine warmup + dropout=0.3 **hurts** DenseNet: DenseNet's dense connections already act as implicit regularisation; additional dropout collapses threshold stability and destabilises recall. D1's flat LR clean baseline is strictly better.
-- D1 best checkpoint at epoch 13; model then overfits (train loss → 0.01, val loss → 0.5+). Early stopping with patience=15 is applied for D3/D4/D5.
+- D2's cosine warmup + dropout=0.3 **hurts** DenseNet: dense connections already act as implicit regularisation; additional dropout collapses threshold stability and destabilises recall.
+- D1 best checkpoint at epoch 13; model then overfits. Early stopping with patience=15 applied for D3/D4/D5.
 - TTA hurts D1 (−3.95pp on val) — all DenseNet inference uses single forward pass.
-- D3 (CLAHE only) **regresses −6.2pp** vs D1 (66.2% vs 72.4%). DenseNet's dense connections already propagate low-level contrast features across all layers — CLAHE disrupts the learned input distribution without adding discriminative information. D4/D5 skipped; −6pp is unrecoverable by adding augmentation.
+- D3 (CLAHE only) **regresses −6.2pp** vs D1 (66.2% vs 72.4%). DenseNet's dense connections already propagate low-level contrast features across all layers — CLAHE disrupts the learned input distribution without adding discriminative information. D4/D5 skipped.
 - **CAALMIX is architecture-selective:** CLAHE+Albu helps ResNet-18 (+3.1pp, E6) but hurts DenseNet-169 (−6.2pp, D3). This is the primary CAALMIX empirical finding.
 
 Weights: `weights/D1_best.pth`
@@ -555,23 +632,41 @@ Weights: `weights/D1_best.pth`
 EfficientNet-B3 (ImageNet pretrained), compound scaling (φ=1.2, ~12M params), full fine-tune,
 Adam, differential LR (backbone 1e-5 / head 1e-3). Same ImageFolder split as E/D-series.
 
-| ID | Epochs | Dropout | Scheduler | Key idea |
-|----|--------|---------|-----------|----------|
-| F1 | 50 (early stop ep36, best ep21) | 0.3 | Plateau | Compound-scaled baseline — 3rd GEL classifier |
+| ID | Epochs | Dropout | Scheduler | Pipeline | Key idea |
+|----|--------|---------|-----------|----------|----------|
+| F1 | 50 (early stop ep36, best ep21) | 0.3 | Plateau | Standard | Compound-scaled baseline — 3rd GEL classifier |
+| F2 | 50 (early stop ep32) | 0.0 | Plateau | +CLAHE | CLAHE-only ablation; confirms CLAHE hurts EfficientNet |
 
 Early stopping patience=15. TTA tested: −3.59pp (skip — consistent with all models).
 
 #### Results
 
-| Split | Threshold | F1 | Recall | Precision | Acc | AUC |
-|-------|-----------|-----|--------|-----------|-----|-----|
-| Val | 0.525 | 67.1% | 68.3% | 65.9% | 88.7% | 0.883 |
-| Test | 0.325 | 56.3% | 65.6% | 49.4% | 81.3% | 0.818 |
+| ID | Split | Threshold | F1 | Recall | Precision | Acc | AUC |
+|----|-------|-----------|-----|--------|-----------|-----|-----|
+| **F1 ★** | Val | 0.525 | **67.1%** | 68.3% | 65.9% | 88.7% | 0.883 |
+| **F1 ★** | Test | 0.325 | **56.3%** | 65.6% | 49.4% | 81.3% | 0.818 |
+| F2 | Val | 0.475 | 63.1% | 64.6% | 61.6% | — | 0.859 |
 
-Val→test generalization gap: −10.7pp F1 (larger than ResNet −2.6pp and DenseNet −4.0pp).
-GEL F1 anchor: 0.671 (val-based, consistent with ResNet and DenseNet anchors).
+F2 vs F1: **−4.0pp** (val F1) — CLAHE hurts EfficientNet-B3, same direction as DenseNet-169.
+Compound scaling handles low-contrast X-rays implicitly (same mechanism as DenseNet dense connections). F3/F4 skipped.
 
-Weights: `weights/F1_best.pth`
+Val→test generalization gap (F1): −10.7pp F1 (larger than ResNet −2.6pp and DenseNet −4.0pp).
+GEL F1 anchor: 0.671 (F1 val-based). Weights: `weights/F1_best.pth`
+
+---
+
+### CAALMIX Architecture Selectivity — Combined Summary
+
+| Model | +CLAHE | +AlbumentationsDelta | +XRayAugMix | XRayAugMix standalone |
+|-------|--------|----------------------|-------------|----------------------|
+| ResNet-18 | +0.9pp | **+3.1pp ✓** | −3.7pp | −2.2pp |
+| DenseNet-169 | **−6.2pp** | SKIPPED | SKIPPED | — |
+| EfficientNet-B3 | **−4.0pp** | SKIPPED | SKIPPED | — |
+
+**Key finding:** CAALMIX is beneficial only for shallow CNNs. Architectures with built-in
+feature reuse (DenseNet dense connections) or compound scaling (EfficientNet) self-regularise
+contrast and are disrupted by explicit CLAHE preprocessing. XRayAugMix is harmful
+regardless of architecture (E8 isolation), ruling out pipeline-order confounds.
 
 ---
 
@@ -583,8 +678,17 @@ implementation adapts automatically to 2 or 3 loaded classifiers. Evaluated via
 `utils/eval_gel.py` (threshold sweep 0.05–0.95, step 0.025). Val-optimal threshold
 transferred to test.
 
-**Hyperparameters:** τ=0.35 (BVG gate), δ=0.40 (OAM disagreement limit),
-k_high=0.30 (HIGH outlier — lenient, lone fracture signal), k_low=0.10 (LOW outlier — aggressive, lone no-fracture dissenter)
+**Hyperparameters** (stored in `gel/gel_config.py` — single source of truth):
+
+| Parameter | Value | Role |
+|-----------|-------|------|
+| τ (gel_tau) | 0.35 | BVG gate — below this, YOLO bbox suppressed |
+| δ (gel_disagree_lim) | 0.40 | OAM — disagreement threshold |
+| k_high | 0.30 | OAM penalty — HIGH outlier (lone fracture signal, lenient) |
+| k_low | 0.10 | OAM penalty — LOW outlier (lone no-frac dissenter, aggressive) |
+| gel_f1_resnet | 0.689 | PDWF weight anchor — E6 val F1 |
+| gel_f1_densenet | 0.724 | PDWF weight anchor — D1 val F1 |
+| gel_f1_efficientnet | 0.671 | PDWF weight anchor — F1 val F1 |
 
 | Split | Model | Threshold | F1 | Recall | Precision | AUC |
 |-------|-------|-----------|-----|--------|-----------|-----|
@@ -675,7 +779,7 @@ All ablations: `epochs=200`, `patience=50`, `optimizer=auto`, `seed=42`, Y0B spl
 | Y2 | 640 | 114 | 0.559 | 0.489 | 0.711 | 0.451 |
 | Y3 | 800 | 124 | 0.561 | 0.500 | 0.704 | 0.522 |
 
-600px is optimal for FracAtlas on both tasks. Resolution increase monotonically hurts performance. COCO-alignment hypothesis (640px) rejected.
+600px is optimal for FracAtlas on both tasks. Resolution increase monotonically hurts performance.
 
 #### Negative sampling ablation — Localization
 
@@ -685,9 +789,7 @@ All ablations: `epochs=200`, `patience=50`, `optimizer=auto`, `seed=42`, Y0B spl
 | Y5 | 1:1 | 1270 | 164 | 0.536 | 0.727 | 0.505 |
 | Y0C | 1:6 | 3940 | 82 | 0.290 | 0.335 | 0.297 |
 
-Negative sampling monotonically degrades YOLO fracture detection on FracAtlas. The 1:1
-ratio (Y5) partially recovers from Y0C's collapse but remains −11.5pp below the
-fractured-only baseline. Y1B confirmed as champion.
+Negative sampling monotonically degrades YOLO fracture detection on FracAtlas. Y1B confirmed as champion.
 
 #### Capacity ablation — Localization (YOLOv8m vs YOLOv8s)
 
@@ -696,7 +798,7 @@ fractured-only baseline. Y1B confirmed as champion.
 | Y1B (reference) | YOLOv8s | 600 | 170 | **0.651** | 0.761 | 0.595 |
 | Y4 | YOLOv8m | 600 | 119 | 0.613 | 0.705 | 0.538 |
 
-YOLOv8m underperforms YOLOv8s by −3.8pp. Larger model overfits on the small dataset (~635 train images). Y4 segmentation not run — detect result sufficient to confirm the pattern.
+YOLOv8m underperforms YOLOv8s by −3.8pp. Larger model overfits on the small dataset (~635 train images).
 
 #### Summary — Best results
 
@@ -725,8 +827,8 @@ A local web app for clinical decision support. Runs entirely offline; no data le
 **Tabs:**
 - **Assist** — Upload X-ray, select inference mode, view GradCAM/bounding box overlay, read per-model probability cards. Zoom via slider or scroll wheel. Send Review button (enabled after prediction) queues the case for expert annotation.
 - **Expert Review** — CSV-driven review queue (Image ID / Preview / Condition / GEL Verdict / Model Output 2×2 / Status). Cancel removes a row. Diagnose panel loads full-resolution original with scroll/slider zoom; expert selects FRACTURED / NON-FRACTURED condition and submits — updates `true_label` and sets `status=diagnosed` in the queue CSV.
-- **Model Status** — Approved baseline metrics (val + test) for all four models + GEL ensemble
-- **Config** — Inference hyperparameters and GEL architecture parameters (τ, δ, k_low, k_high, F1 anchors)
+- **Model Status** — Approved baseline metrics (val + test) for all four models + GEL ensemble.
+- **Config** — Inference hyperparameters and GEL architecture parameters (τ, δ, k_low, k_high, F1 anchors). Values are fetched live from the server via `/api/gel-config` and reflect `gel/gel_config.py` — no HTML edits needed when hyperparameters change.
 
 ```bash
 # Weights required — place in weights/ before starting:
@@ -735,13 +837,20 @@ A local web app for clinical decision support. Runs entirely offline; no data le
 #   D1_best.pth            (required for GEL — DenseNet-169 classifier)
 #   F1_best.pth            (optional — EfficientNet-B3 classifier, GEL adapts if absent)
 
-python inference/app.py
+python FracAssist_Inference/app.py
 # → http://127.0.0.1:5000
 ```
 
+All UI files (`index.html`, `scripts.js`, `style.css`) live inside `FracAssist_Inference/`
+and are served as Flask static files.
+
 ### GEL — Gated Ensemble Logic (primary mode)
 
-The default inference mode is **GEL**, a three-stage reliability architecture:
+The default inference mode is **GEL**, a three-stage reliability architecture.
+All GEL math lives in `gel/gel_pipeline.py` (canonical `apply_gel()`). All hyperparameters
+are in `gel/gel_config.py` (single source of truth). `FracAssist_Inference/config.py`,
+`utils/eval_gel.py`, and `review/generate_predictions.py` all import from `gel/` —
+changing a value in `gel_config.py` propagates everywhere.
 
 ```
 Upload X-ray (JPG / PNG)
@@ -756,13 +865,16 @@ Upload X-ray (JPG / PNG)
   └──────────────────────────────────────────────────────┘
         │
         ▼
-  OAM — Asymmetric Outlier-Aware Modification
+  RC init — F1-normalised reliability coefficients
+        │
+        ▼
+  Asymmetric OAM — Outlier-Aware Modification
   (|p_i − μ| > 0.40 triggers penalty; direction determines severity)
   HIGH outlier (p_i > μ, lone fracture signal)      → k_high = 0.30  lenient  — preserve fracture signal
   LOW  outlier (p_i < μ, no-frac dissenter)         → k_low  = 0.10  aggressive — protect fracture consensus
         │
         ▼
-  PDWF — Performance-weighted Decision Fusion
+  PDWF — Performance-Driven Weighted Fusion
   (F1-weighted average of OAM-adjusted classifiers — adapts to 2 or 3)
         │
         ▼
@@ -773,17 +885,17 @@ Upload X-ray (JPG / PNG)
    fracture_probability  label  xray_with_box  gradcam_image (DenseNet-169 denseblock4)
 ```
 
-OAM uses asymmetric penalties: a HIGH outlier (lone fracture signal) receives a lenient penalty (k=0.30) to preserve the fracture signal; a LOW outlier (lone no-fracture dissenter against a fracture consensus) receives an aggressive penalty (k=0.10) to prevent P_final being dragged toward a missed fracture. Both directions protect against missed fractures from opposite sides. A symmetric balanced reference (k=0.20) is preserved in config for comparison.
+OAM uses asymmetric penalties: a HIGH outlier (lone fracture signal) receives a lenient penalty (k=0.30) to preserve the fracture signal; a LOW outlier (lone no-fracture dissenter against a fracture consensus) receives an aggressive penalty (k=0.10) to prevent P_final being dragged toward a missed fracture. A symmetric balanced reference (k=0.20) is preserved in `gel_config.py` for comparison.
 
-BVG uses `p_final` — the same OAM-adjusted PDWF output that becomes the fracture probability — rather than a separate pre-OAM intermediate. The gate and the clinical output are derived from an identical, calibrated estimate.
+BVG uses `p_final` — the same OAM-adjusted PDWF output that becomes the fracture probability — rather than a separate pre-OAM intermediate. The gate and the clinical output derive from an identical, calibrated estimate.
 
 **Inference modes** (selectable via UI dropdown):
 
 | Mode | Key | Description |
 |------|-----|-------------|
-| GEL | `gel` | Default — all 3 models + BVG/OAM/PDWF |
+| GEL | `gel` | Default — all 3 classifiers + BVG/OAM/PDWF |
 | YOLOv8s only | `yolo` | Detection only; no classification |
-| ResNet-18 + DenseNet-169 | `resnet` | Classifiers only; no localization |
+| ResNet-18 + DenseNet-169 + EfficientNet-B3 | `resnet` | Classifiers only; no localization |
 
 ### API
 
@@ -792,6 +904,7 @@ BVG uses `p_final` — the same OAM-adjusted PDWF output that becomes the fractu
 | `GET` | `/` | Serve `index.html` |
 | `GET` | `/health` | `{"status": "ok", "device": "cuda:0"}` |
 | `POST` | `/predict` | `multipart/form-data` with `image` field → inference JSON |
+| `GET` | `/api/gel-config` | Return `gel/gel_config.py` contents as JSON — used by Config tab to display live values |
 | `GET` | `/fractatlas/<filename>` | Serve full-resolution FracAtlas image by filename (searches Fractured/ and Non_fractured/) |
 | `GET` | `/review-queue` | Return `review/expert_review.csv` as JSON list |
 | `POST` | `/send-review` | Append inference result to review queue; derives `true_label` from FracAtlas folder; 409 on duplicate |
@@ -804,7 +917,7 @@ BVG uses `p_final` — the same OAM-adjusted PDWF output that becomes the fractu
 
 - Global seed: `42` (applied to Python `random`, NumPy, PyTorch, and CUDA via `--seed`).
 - Validation set is used for all tuning decisions; test set is used once per phase.
-- Experiment IDs are stable: `E-series` (ResNet-18), `D-series` (DenseNet-169), `Y-series` (YOLO).
+- Experiment IDs are stable: `E-series` (ResNet), `D-series` (DenseNet-169), `F-series` (EfficientNet-B3), `Y-series` (YOLO).
 - `--debug` flag overrides `epochs=1` for fast pipeline validation without touching configs.
 - All classification training logs saved to `results/logs/`.
 - Post-training threshold sweep (0.05–0.95, step 0.025) runs automatically and saves the optimal threshold into the checkpoint.

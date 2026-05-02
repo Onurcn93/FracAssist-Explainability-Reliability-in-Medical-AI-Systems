@@ -167,12 +167,12 @@ def _build_model(dropout_p: float, device: torch.device) -> nn.Module:
     in_features = 1536 for B3.
     """
     model   = tv_models.efficientnet_b3(weights=tv_models.EfficientNet_B3_Weights.IMAGENET1K_V1)
-    in_feat = model.classifier[1].in_features  # 1536
+    in_feat: int = model.classifier[1].in_features  # type: ignore[union-attr]
 
     if dropout_p > 0.0:
-        model.classifier = nn.Sequential(nn.Dropout(p=dropout_p), nn.Linear(in_feat, 2))
+        model.classifier = nn.Sequential(nn.Dropout(p=dropout_p), nn.Linear(in_feat, 2))  # type: ignore[assignment]
     else:
-        model.classifier = nn.Linear(in_feat, 2)
+        model.classifier = nn.Linear(in_feat, 2)  # type: ignore[assignment]
 
     for p in model.parameters():
         p.requires_grad = True
@@ -610,6 +610,7 @@ def run_training(config: dict) -> Path:
                     "exp_id":               exp_id,
                     "val_threshold":        val_thresh,
                     "frac_idx":             frac_idx,
+                    "use_clahe":            use_clahe,
                 },
                 ckpt_path,
             )

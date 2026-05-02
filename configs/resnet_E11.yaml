@@ -1,0 +1,39 @@
+# configs/resnet_E11.yaml
+#
+# ResNet-34 + CAALMIX — mirrors E6 augmentation on a deeper backbone.
+#
+# Ablation question: Does adding CLAHE + AlbumentationsDelta (E6's winning
+# augmentation stack) recover the gap E9 had against E6?
+# If E11 > E9 by ~0.02pp, augmentation transfers to deeper backbones.
+# If E11 ≈ E9, CAALMIX benefit is ResNet-18-specific (capacity already saturated).
+#
+# Single change vs E9: use_clahe=true, use_albu=true.
+# Same backbone (resnet34), same scheduler, same differential LR.
+#
+# Decision gate:
+#   E11 > E9  (0.6709) → CAALMIX helps at depth-34
+#   E11 > E6  (0.6892) → new champion; update FracAssist_Inference/config.py
+#
+# Run:
+#   python main.py --config configs/resnet_E11.yaml --task E11
+
+E11:
+  experiment_id       : "E11"
+  task                : "classify"
+  resnet_variant      : "resnet34"
+  data_dir            : "data/dataset_cls"
+  epochs              : 50
+  batch_size          : 32
+  img_size            : 224
+  device              : "0"
+  dropout_p           : 0.0
+  weight_mult         : 0.5
+  loss                : "weighted_ce"
+  scheduler           : "plateau"
+  lr_backbone         : 1.0e-5
+  lr_head             : 1.0e-3
+  val_threshold       : 0.5
+  early_stop_patience : 15
+  use_clahe           : true
+  use_albu            : true
+  plot                : true

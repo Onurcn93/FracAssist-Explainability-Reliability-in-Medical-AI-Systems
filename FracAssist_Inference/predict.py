@@ -1,5 +1,5 @@
 """
-inference/predict.py — FracAssist inference module.
+FracAssist_Inference/predict.py — FracAssist inference module.
 
 Primary mode: GEL (Gated Ensemble Logic)
   All four models run in parallel (YOLO + ResNet-18 + DenseNet-169 + EfficientNet-B3).
@@ -25,6 +25,7 @@ from torchvision import models as tv_models, transforms
 from ultralytics import YOLO
 
 import utils.gradcam as gradcam_utils
+from gel.gel_pipeline import apply_gel
 
 
 def _imread(path: str):
@@ -54,6 +55,7 @@ _efficientnet_model     = None
 _efficientnet_loaded    = False
 _efficientnet_frac_idx  = 0
 _efficientnet_threshold = 0.5   # placeholder; overridden from checkpoint at load time
+_efficientnet_use_clahe = False  # True when champion checkpoint was trained with CLAHE (e.g. F2)
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +68,7 @@ def load_models(config):
     global _yolo_model
     global _resnet_model, _resnet_loaded, _resnet_frac_idx, _resnet_threshold
     global _densenet_model, _densenet_loaded, _densenet_frac_idx, _densenet_threshold
-    global _efficientnet_model, _efficientnet_loaded, _efficientnet_frac_idx, _efficientnet_threshold
+    global _efficientnet_model, _efficientnet_loaded, _efficientnet_frac_idx, _efficientnet_threshold, _efficientnet_use_clahe
 
     device = config["device"]
 
@@ -148,16 +150,18 @@ def load_models(config):
             state                   = ckpt["model_state_dict"]
             _efficientnet_frac_idx  = ckpt.get("frac_idx", 0)
             _efficientnet_threshold = ckpt.get("val_threshold", config.get("efficientnet_threshold", 0.5))
+            _efficientnet_use_clahe = ckpt.get("use_clahe", False)
         else:
             state                   = ckpt
             _efficientnet_frac_idx  = 0
             _efficientnet_threshold = config.get("efficientnet_threshold", 0.5)
+            _efficientnet_use_clahe = False
 
         # Detect dropout: Sequential(Dropout, Linear) → "classifier.1.weight"
         has_dropout = "classifier.1.weight" in state
         m = tv_models.efficientnet_b3(weights=None)
-        in_feat = m.classifier[1].in_features  # 1536
-        m.classifier = (
+        in_feat: int = m.classifier[1].in_features  # type: ignore[union-attr]
+        m.classifier = (  # type: ignore[assignment]
             nn.Sequential(nn.Dropout(0.3), nn.Linear(in_feat, 2))
             if has_dropout else nn.Linear(in_feat, 2)
         )
@@ -167,7 +171,7 @@ def load_models(config):
         _efficientnet_loaded = True
         print(
             f"[INFO] EfficientNet-B3 loaded: {efficientnet_path} "
-            f"(threshold={_efficientnet_threshold:.3f}, dropout={has_dropout})"
+            f"(threshold={_efficientnet_threshold:.3f}, dropout={has_dropout}, clahe={_efficientnet_use_clahe})"
         )
     else:
         print(f"[INFO] EfficientNet-B3 weights not found — will show as pending in UI.")
@@ -329,49 +333,6 @@ def _draw_bbox_base64(image_path, bbox, confidence, gel_prob=None):
 # GEL — Gated Ensemble Logic
 # ---------------------------------------------------------------------------
 
-def _run_gel(probs_f1, config):
-    """RC init -> OAM -> PDWF -> P_final -> BVG gate. Returns (p_final, gate_passed).
-
-    OAM is Asymmetric: a HIGH outlier (lone fracture signal) is penalised
-    leniently (k_high=0.30) to preserve the fracture signal; a LOW outlier (lone no-fracture
-    dissenter against a fracture consensus) is penalised aggressively (k_low=0.10) to protect
-    against missed fractures. Both directions are clinically aligned — fracture signals are
-    harder to suppress than no-fracture signals.
-
-    BVG gate uses P_final — the fully OAM-adjusted ensemble probability — so the gate and the
-    fracture probability shown to the clinician are derived from the same calibrated estimate.
-
-    probs_f1: list of (probability, f1_weight) tuples — one per loaded classifier.
-              Accepts 2 or 3 classifiers; logic is identical regardless of count.
-
-    YOLO is intentionally excluded from PDWF: detection confidence is not
-    a classification probability and cannot be meaningfully mixed with
-    softmax outputs in a weighted sum.
-    """
-    tau    = config["gel_tau"]
-    dlim   = config["gel_disagree_lim"]
-    k_low  = config["gel_penalty_k_low"]   # 0.10 — aggressive: LOW outlier (no-frac dissenter)
-    k_high = config["gel_penalty_k_high"]  # 0.30 — lenient:    HIGH outlier (lone fracture signal)
-
-    # Step 2 — RC initialisation (F1-normalised classifier weights)
-    total_f1 = sum(f1 for _, f1 in probs_f1)
-    rcs = [f1 / total_f1 for _, f1 in probs_f1]
-
-    # Step 3 — Asymmetric OAM
-    mu  = sum(p for p, _ in probs_f1) / len(probs_f1)
-    rcs = [rc * (k_low if p < mu else k_high) if abs(p - mu) > dlim else rc
-           for (p, _), rc in zip(probs_f1, rcs)]
-
-    # Step 4 — Performance-Driven Weighted Fusion
-    total_rc = sum(rcs)
-    p_final  = sum(p * rc for (p, _), rc in zip(probs_f1, rcs)) / total_rc
-
-    # Step 5 — BVG gate: authenticate YOLO bbox using P_final (post-OAM)
-    gate_passed = p_final >= tau
-
-    return p_final, gate_passed
-
-
 # ---------------------------------------------------------------------------
 # Top-level predict
 # ---------------------------------------------------------------------------
@@ -436,7 +397,7 @@ def predict(image_path, config, inference_mode="gel"):
 
         resnet_tensor       = _preprocess_clahe(image_path, config["resnet_input_size"],    config) if _resnet_loaded       else None
         densenet_tensor     = _preprocess(image_path, config["densenet_input_size"],       config) if _densenet_loaded     else None
-        efficientnet_tensor = _preprocess(image_path, config["efficientnet_input_size"],   config) if _efficientnet_loaded else None
+        efficientnet_tensor = (_preprocess_clahe if _efficientnet_use_clahe else _preprocess)(image_path, config["efficientnet_input_size"], config) if _efficientnet_loaded else None
 
         if _resnet_loaded:
             label, resnet_prob = run_resnet(resnet_tensor, config)
@@ -471,7 +432,7 @@ def predict(image_path, config, inference_mode="gel"):
     if inference_mode == "gel":
         resnet_tensor       = _preprocess_clahe(image_path, config["resnet_input_size"],    config) if _resnet_loaded       else None
         densenet_tensor     = _preprocess(image_path, config["densenet_input_size"],       config) if _densenet_loaded     else None
-        efficientnet_tensor = _preprocess(image_path, config["efficientnet_input_size"],   config) if _efficientnet_loaded else None
+        efficientnet_tensor = (_preprocess_clahe if _efficientnet_use_clahe else _preprocess)(image_path, config["efficientnet_input_size"], config) if _efficientnet_loaded else None
         detections          = run_yolo(_yolo_model, image_path, config)
 
         # Raw classifier probabilities
@@ -490,24 +451,17 @@ def predict(image_path, config, inference_mode="gel"):
             result["yolo_confidence"] = best["confidence"]
             result["bbox"]            = best["bbox"]
 
-        # Build (prob, f1_weight) list for all loaded classifiers
-        probs_f1 = []
-        if p_r is not None:
-            probs_f1.append((p_r, config["gel_f1_resnet"]))
-        if p_d is not None:
-            probs_f1.append((p_d, config["gel_f1_densenet"]))
-        if p_e is not None:
-            probs_f1.append((p_e, config["gel_f1_efficientnet"]))
+        _loaded = [x for x in [p_r, p_d, p_e] if x is not None]
 
-        if len(probs_f1) >= 2:
-            # Full GEL: RC init -> OAM -> PDWF -> P_final -> BVG gate
-            p_final, gate_passed = _run_gel(probs_f1, config)
+        if len(_loaded) >= 2:
+            # Full GEL: RC init -> Asymmetric OAM -> PDWF -> P_final -> BVG gate
+            p_final, gate_passed = apply_gel(p_r, p_d, p_e)
             result["mode"]            = "GEL"
             result["gel_gate_passed"] = gate_passed
             result["gel_consensus"]   = round(p_final, 4)
-        elif len(probs_f1) == 1:
+        elif len(_loaded) == 1:
             # Degraded: single classifier available, no OAM
-            p_solo      = probs_f1[0][0]
+            p_solo      = _loaded[0]
             gate_passed = p_solo >= config["gel_tau"]
             p_final     = p_solo if gate_passed else 0.0
             result["mode"]            = "GEL-DEGRADED"

@@ -91,8 +91,16 @@ def _infer_dropout(path: Path, state_dict: dict) -> float:
     return 0.0
 
 
-def _build_model(dropout_p: float, device: torch.device) -> nn.Module:
-    model   = tv_models.resnet18(weights=tv_models.ResNet18_Weights.IMAGENET1K_V1)
+_RESNET_FACTORIES = {
+    "resnet18": (tv_models.resnet18, tv_models.ResNet18_Weights.IMAGENET1K_V1),
+    "resnet34": (tv_models.resnet34, tv_models.ResNet34_Weights.IMAGENET1K_V1),
+    "resnet50": (tv_models.resnet50, tv_models.ResNet50_Weights.IMAGENET1K_V2),
+}
+
+
+def _build_model(dropout_p: float, device: torch.device, arch: str = "resnet18") -> nn.Module:
+    factory, weights = _RESNET_FACTORIES[arch]
+    model   = factory(weights=weights)
     in_feat = model.fc.in_features
     model.fc = (nn.Sequential(nn.Dropout(p=dropout_p), nn.Linear(in_feat, 2))
                 if dropout_p > 0.0 else nn.Linear(in_feat, 2))
@@ -174,7 +182,8 @@ def main(data_dir: Path, ckpt_filter: str = None):
 
         state     = ckpt.get("model_state_dict", ckpt)
         dropout_p = _infer_dropout(ckpt_path, state)
-        model     = _build_model(dropout_p, device)
+        arch      = ckpt.get("resnet_variant", "resnet18")
+        model     = _build_model(dropout_p, device, arch=arch)
         model.load_state_dict(state, strict=True)
         model.eval()
 

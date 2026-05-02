@@ -160,10 +160,22 @@ class WarmupCosineScheduler:
 
 # ── Model builder ─────────────────────────────────────────────────── #
 
-def _build_model(dropout_p: float, device: torch.device) -> nn.Module:
-    """ResNet-18 (ImageNet pretrained), all layers unfrozen, optional dropout."""
-    model    = tv_models.resnet18(weights=tv_models.ResNet18_Weights.IMAGENET1K_V1)
-    in_feat  = model.fc.in_features   # 512
+_RESNET_FACTORIES = {
+    "resnet18": (tv_models.resnet18, tv_models.ResNet18_Weights.IMAGENET1K_V1),
+    "resnet34": (tv_models.resnet34, tv_models.ResNet34_Weights.IMAGENET1K_V1),
+    "resnet50": (tv_models.resnet50, tv_models.ResNet50_Weights.IMAGENET1K_V2),
+}
+
+
+def _build_model(dropout_p: float, device: torch.device, arch: str = "resnet18") -> nn.Module:
+    """ResNet (ImageNet pretrained), all layers unfrozen, optional dropout.
+
+    arch: "resnet18" (default), "resnet34", or "resnet50".
+    in_features: 512 for resnet18/34, 2048 for resnet50 (bottleneck blocks).
+    """
+    factory, weights = _RESNET_FACTORIES[arch]
+    model   = factory(weights=weights)
+    in_feat = model.fc.in_features
 
     if dropout_p > 0.0:
         model.fc = nn.Sequential(nn.Dropout(p=dropout_p), nn.Linear(in_feat, 2))
@@ -459,10 +471,14 @@ def run_training(config: dict) -> Path:
     lr_bb       = config.get("lr_backbone",   1e-5)
     lr_head     = config.get("lr_head",       1e-3)
     val_thresh  = config.get("val_threshold", 0.5)
-    use_clahe          = config.get("use_clahe",          False)
-    use_albu           = config.get("use_albu",           False)
-    use_augmix         = config.get("use_augmix",         False)
-    early_stop_patience = config.get("early_stop_patience", 0)  # 0 = disabled
+    resnet_variant      = config.get("resnet_variant",        "resnet18")
+    use_clahe           = config.get("use_clahe",             False)
+    use_albu            = config.get("use_albu",              False)
+    use_augmix          = config.get("use_augmix",            False)
+    early_stop_patience = config.get("early_stop_patience",   0)  # 0 = disabled
+
+    if resnet_variant not in _RESNET_FACTORIES:
+        raise ValueError(f"resnet_variant must be one of {list(_RESNET_FACTORIES)}; got '{resnet_variant}'")
 
     # ── Device ───────────────────────────────────────────────────── #
     dev_str = str(config.get("device", "cpu"))
@@ -472,8 +488,9 @@ def run_training(config: dict) -> Path:
         device = torch.device("cpu")
 
     # ── Experiment label (mirrors YOLO style) ─────────────────────── #
+    arch_label = resnet_variant.replace("resnet", "ResNet-")  # "resnet50" → "ResNet-50"
     experiment = (
-        f"{exp_id} | ResNet-18 | classify"
+        f"{exp_id} | {arch_label} | classify"
         f" | epochs={epochs}"
         f" | loss={loss_type}"
         + (f"(γ={gamma})" if loss_type == "focal" else "")
@@ -497,7 +514,7 @@ def run_training(config: dict) -> Path:
         "Task"     : "classify  (binary: Fractured / Non_fractured)",
         "Data"     : str(data_dir),
         "Epochs"   : f"{epochs}  |  batch: {batch_size}  |  imgsz: {img_size}  |  Device: {device}",
-        "Model"    : f"ResNet-18 (ImageNet pretrained)  |  dropout: {dropout_p}",
+        "Model"    : f"{arch_label} (ImageNet pretrained)  |  dropout: {dropout_p}",
         "Loss"     : loss_type + (f"  gamma={gamma}" if loss_type == "focal" else ""),
         "Weights"  : f"class weight multiplier: {weight_mult}",
         "Scheduler": sched_type + (f"  warmup={warmup_ep} ep" if sched_type == "cosine_warmup" else ""),
@@ -537,7 +554,7 @@ def run_training(config: dict) -> Path:
     )
 
     # ── Model ────────────────────────────────────────────────────── #
-    model = _build_model(dropout_p, device)
+    model = _build_model(dropout_p, device, arch=resnet_variant)
 
     # ── Loss function ────────────────────────────────────────────── #
     class_weights = _compute_class_weights(data_dir, weight_mult, device)
@@ -614,6 +631,7 @@ def run_training(config: dict) -> Path:
                     "exp_id":              exp_id,
                     "val_threshold":       val_thresh,
                     "frac_idx":            frac_idx,
+                    "resnet_variant":      resnet_variant,
                 },
                 ckpt_path,
             )

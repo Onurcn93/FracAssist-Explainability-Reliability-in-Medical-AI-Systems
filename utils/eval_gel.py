@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+import sys
 from pathlib import Path
 
 import cv2
@@ -32,6 +33,13 @@ from torchvision.datasets import ImageFolder
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from gel.gel_config import GEL_CONFIG    # noqa: E402
+from gel.gel_pipeline import apply_gel   # noqa: E402
+
 # ── Constants ──────────────────────────────────────────────────────────── #
 
 BATCH_SIZE    = 32
@@ -44,15 +52,15 @@ RESNET_WEIGHTS       = Path("weights/E6_best.pth")
 DENSENET_WEIGHTS     = Path("weights/D1_best.pth")
 EFFICIENTNET_WEIGHTS = Path("weights/F1_best.pth")
 
-# GEL hyperparameters — must match inference/config.py GEL_CONFIG exactly
-GEL_F1_RESNET          = 0.689   # E6 val F1 anchor (CAALMIX champion)
-GEL_F1_DENSENET        = 0.724   # D1 val F1 anchor
-GEL_F1_EFFICIENTNET    = 0.671   # F1 val F1 anchor (confirmed 2026-04-28)
-GEL_TAU                = 0.35    # BVG gate threshold
-GEL_DISAGREE_LIM       = 0.40    # OAM outlier disagreement limit
-GEL_PENALTY_K_LOW      = 0.10    # Direction-aware OAM — LOW outlier (aggressive: lone no-frac dissenter)
-GEL_PENALTY_K_HIGH     = 0.30    # Direction-aware OAM — HIGH outlier (lenient: lone fracture signal)
-GEL_PENALTY_K_STANDARD = 0.20    # Symmetric balanced reference (not used in inference)
+# GEL hyperparameters — sourced from gel/gel_config.py
+GEL_F1_RESNET          = GEL_CONFIG["gel_f1_resnet"]
+GEL_F1_DENSENET        = GEL_CONFIG["gel_f1_densenet"]
+GEL_F1_EFFICIENTNET    = GEL_CONFIG["gel_f1_efficientnet"]
+GEL_TAU                = GEL_CONFIG["gel_tau"]
+GEL_DISAGREE_LIM       = GEL_CONFIG["gel_disagree_lim"]
+GEL_PENALTY_K_LOW      = GEL_CONFIG["gel_penalty_k_low"]
+GEL_PENALTY_K_HIGH     = GEL_CONFIG["gel_penalty_k_high"]
+GEL_PENALTY_K_STANDARD = GEL_CONFIG["gel_penalty_k_standard"]
 
 RESNET_THRESHOLD       = 0.525   # E6 val-optimal (individual comparison)
 DENSENET_THRESHOLD     = 0.175   # D1 val-optimal (individual comparison)
@@ -158,51 +166,6 @@ def _collect_labels(loader):
     return np.array(labels)
 
 
-# ── GEL — vectorized ─────────────────────────────────────────────────── #
-
-def _apply_gel(p_r, p_d, p_e=None):
-    """Vectorized GEL: RC init -> Asymmetric OAM -> PDWF -> P_final -> BVG gate.
-
-    Asymmetric OAM:
-      HIGH outlier (p_i > mu, lone fracture signal)   -> k_high=0.30 lenient  — preserve fracture signal
-      LOW  outlier (p_i < mu, lone no-frac dissenter) -> k_low =0.10 aggressive — protect fracture consensus
-    Both directions protect against missed fractures from opposite sides.
-
-    Returns (p_final, gate_passed) — both shape (N,).
-    """
-    use_e = p_e is not None
-
-    if use_e:
-        total_f1 = GEL_F1_RESNET + GEL_F1_DENSENET + GEL_F1_EFFICIENTNET
-        probs = [p_r, p_d, p_e]
-        f1s   = [GEL_F1_RESNET, GEL_F1_DENSENET, GEL_F1_EFFICIENTNET]
-    else:
-        total_f1 = GEL_F1_RESNET + GEL_F1_DENSENET
-        probs = [p_r, p_d]
-        f1s   = [GEL_F1_RESNET, GEL_F1_DENSENET]
-
-    n = len(probs)
-
-    # Step 2 — RC initialisation
-    rcs = [np.full_like(p, f1 / total_f1) for p, f1 in zip(probs, f1s)]
-
-    # Step 3 — Asymmetric OAM
-    mu = sum(probs) / n
-    new_rcs = []
-    for p, rc in zip(probs, rcs):
-        outlier = np.abs(p - mu) > GEL_DISAGREE_LIM
-        k = np.where(p < mu, GEL_PENALTY_K_LOW, GEL_PENALTY_K_HIGH)
-        new_rcs.append(np.where(outlier, rc * k, rc))
-    rcs = new_rcs
-
-    # Step 4 — PDWF
-    total_rc = sum(rcs)
-    p_final  = sum(p * rc for p, rc in zip(probs, rcs)) / total_rc
-
-    # Step 5 — BVG gate using P_final (post-OAM)
-    gate_passed = p_final >= GEL_TAU
-
-    return p_final, gate_passed
 
 
 # ── Threshold helpers ─────────────────────────────────────────────────── #
@@ -277,7 +240,7 @@ def eval_split(resnet, densenet, r_fi, d_fi, data_dir, device, label, val_thresh
     p_r    = _collect_single(resnet,  r_fi, loader_clahe, device)
     p_d    = _collect_single(densenet, d_fi, loader_std,  device)
     p_e    = _collect_single(efficientnet, e_fi, loader_std, device) if use_e else None
-    p_final, gate_passed = _apply_gel(p_r, p_d, p_e)
+    p_final, gate_passed = apply_gel(p_r, p_d, p_e)
 
     probs = [p_r, p_d] + ([p_e] if use_e else [])
     names = ["ResNet-18", "DenseNet-169"] + (["EfficientNet-B3"] if use_e else [])

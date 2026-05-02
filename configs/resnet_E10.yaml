@@ -1,0 +1,39 @@
+# configs/resnet_E10.yaml
+#
+# ResNet-50 baseline — mirrors E4a_m050 exactly.
+#
+# Ablation question: Does bottleneck scaling (ResNet-50, fc.in_features=2048 vs 512)
+# provide additional discriminative capacity for fracture classification?
+# ResNet-50 is 3× the parameter count of ResNet-18 — overfitting risk is higher
+# on the small FracAtlas split.
+#
+# Single change vs E4a: resnet_variant=resnet50.
+# No CLAHE, no augmentation deltas, plateau scheduler, w=0.5.
+#
+# Decision gate:
+#   E10 > E9  → bottleneck architecture adds value beyond extra depth
+#   E10 < E9  → diminishing returns; ResNet-34 is the sweet spot
+#   E10 > E6 (0.6892) → new champion; update inference/config.py
+#
+# Run:
+#   python main.py --config configs/resnet_E10.yaml --task E10
+
+E10:
+  experiment_id       : "E10"
+  task                : "classify"
+  resnet_variant      : "resnet50"
+  data_dir            : "data/dataset_cls"
+  epochs              : 50
+  batch_size          : 32
+  img_size            : 224
+  device              : "0"
+  dropout_p           : 0.0
+  weight_mult         : 0.5
+  loss                : "weighted_ce"
+  scheduler           : "plateau"
+  lr_backbone         : 1.0e-5
+  lr_head             : 1.0e-3
+  val_threshold       : 0.5
+  early_stop_patience : 15
+  use_clahe           : false
+  plot                : true
