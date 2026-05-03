@@ -25,7 +25,7 @@ annotated for classification, localization, and segmentation.
 | 1 | EfficientNet-B3 | Binary fracture classification (F-series) | F1 (fractured class) | F1 baseline (67.1% val / 56.3% test); F2 CLAHE confirms CLAHE hurts (−4.0pp) |
 | 1 | GEL Ensemble | Three-model ensemble: RC → Asymmetric OAM → PDWF → BVG gate | AUC + F1 (val primary) | **Complete** — val AUC 90.6%, val F1 73.9%; best on all val metrics; γ=11.4, δ=0.21 (joint grid search) |
 | 2 | YOLOv8s / YOLOv8s-seg / YOLOv8m | Localization & segmentation | mAP@0.5 | Complete |
-| 3 | CBM + Prototypes + Counterfactuals | XAI — three-pillar architecture | Task-specific | Pending |
+| 3 | — | XAI (CBM + Prototypes + Counterfactuals) | — | Descoped — thesis novelty: GEL ensemble + empirical findings |
 
 Phase 3 is the core thesis contribution: integrating clinically-grounded attribute
 explanations (Pillar 1), precedent-based example retrieval (Pillar 2), and contrastive
