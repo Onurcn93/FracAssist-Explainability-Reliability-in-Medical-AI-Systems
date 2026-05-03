@@ -743,7 +743,7 @@ Three-stage sweep via `utils/tune_gel.py`:
 2. `--mode oam` — δ sweep (0.05→0.80, step=0.05): identified δ=0.40 (prior default) as a dead zone — neither tight enough for AUC nor loose enough for F1
 3. `--mode grid` — joint γ×δ grid search (141×76=10,716 combos, step=0.1/0.01): resolved both axes simultaneously; optimum at γ=11.4, δ=0.21 — 1D sweeps had masked the true optimum by fixing the other axis
 
-Full results: `results/gel_eval_results.txt`
+Full results: `results/gel_eval_results.log`
 
 ---
 

@@ -9,6 +9,7 @@ FracAtlas/
 results/*
 !results/*.csv
 !results/*.txt
+!results/*.log
 weights/
 
 # Generated YOLO dataset staging areas

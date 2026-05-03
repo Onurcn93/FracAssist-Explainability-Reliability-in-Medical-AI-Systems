@@ -217,12 +217,14 @@
                     <div class="health-row"><span>Split</span><span class="text-teal">val + test confirmed</span></div>
                 </div>
                 <div class="health-card health-card-wide">
-                    <div class="health-card-title">GEL — Gated Ensemble Logic</div>
-                    <div class="health-row"><span>F1 (Fractured)</span><span class="text-teal">70.13% val / 67.74% test (sweep-opt)</span></div>
-                    <div class="health-row"><span>AUC</span><span class="text-teal">0.8999 val / 0.8540 test — highest on both splits</span></div>
-                    <div class="health-row"><span>OAM — Asymmetric</span><span>|p_i − μ| &gt; 0.40 · HIGH outlier k=0.30 (lenient) · LOW outlier k=0.10 (aggressive)</span></div>
-                    <div class="health-row"><span>PDWF — Performance-Driven Weighted Fusion</span><span class="text-teal">F1-weighted: ResNet-18 (0.689) + DenseNet-169 (0.724) + EfficientNet-B3 (0.671)</span></div>
-                    <div class="health-row"><span>BVG — Bounding Box Validation Gate</span><span class="text-teal">P_final authenticates YOLO bbox (P_final ≥ τ = 0.35) · gate pass 16.5% val / 17.8% test</span></div>
+                    <div class="health-card-title">GEL v3 — Gated Ensemble Logic (Grid-Optimal)</div>
+                    <div class="health-row"><span>F1 (Fractured)</span><span class="text-teal">73.94% val / 67.18% test (sweep-opt) — best of all models on val</span></div>
+                    <div class="health-row"><span>AUC</span><span class="text-teal">0.9060 val / 0.8916 test — highest on val</span></div>
+                    <div class="health-row"><span>Threshold</span><span>0.400 val-optimal · 0.325 test-sweep</span></div>
+                    <div class="health-row"><span>RC — Expert-Dominant (γ=11.4)</span><span class="text-teal">ResNet ~30.5% · DenseNet ~43.5% · EfficientNet ~26.0%</span></div>
+                    <div class="health-row"><span>OAM — Asymmetric (δ=0.21)</span><span>|p_i − μ| &gt; 0.21 · HIGH outlier k=0.30 (lenient) · LOW outlier k=0.10 (aggressive) · ~19% trigger on val</span></div>
+                    <div class="health-row"><span>PDWF — Performance-Driven Weighted Fusion</span><span class="text-teal">Expert-Dominant weighted fusion · F1 anchors: ResNet 0.689 · DenseNet 0.724 · EfficientNet 0.671</span></div>
+                    <div class="health-row"><span>BVG — Bounding Box Validation Gate</span><span class="text-teal">P_final ≥ τ = 0.35 · gate pass 18.4% val / 20.8% test</span></div>
                     <div class="health-row"><span>GradCAM target</span><span>DenseNet-169 denseblock4</span></div>
                     <div class="health-row"><span>Dataset</span><span>FracAtlas · 4,083 X-rays</span></div>
                 </div>
