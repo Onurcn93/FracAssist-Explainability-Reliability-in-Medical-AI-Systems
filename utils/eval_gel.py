@@ -18,6 +18,24 @@ import argparse
 import sys
 from pathlib import Path
 
+
+class _Tee:
+    """Mirror stdout to a log file simultaneously."""
+    def __init__(self, path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._file = open(path, "w", encoding="utf-8")
+        self._stdout = sys.stdout
+        sys.stdout = self
+    def write(self, data):
+        self._stdout.write(data)
+        self._file.write(data)
+    def flush(self):
+        self._stdout.flush()
+        self._file.flush()
+    def close(self):
+        sys.stdout = self._stdout
+        self._file.close()
+
 import cv2
 import numpy as np
 import torch
@@ -284,9 +302,12 @@ def eval_split(resnet, densenet, r_fi, d_fi, data_dir, device, label, val_thresh
 
 # ── Main ─────────────────────────────────────────────────────────────── #
 
-def main(split):
+def main(split, gamma):
+    if gamma is not None:
+        GEL_CONFIG["gel_gamma"] = gamma
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
+    print(f"RC gamma: {GEL_CONFIG['gel_gamma']}  (base_shift={GEL_CONFIG['gel_base_shift']})")
     print(f"ResNet-18    weights : {RESNET_WEIGHTS}")
     print(f"DenseNet-169 weights : {DENSENET_WEIGHTS}")
     print(f"EfficientNet weights : {EFFICIENTNET_WEIGHTS}")
@@ -328,5 +349,16 @@ if __name__ == "__main__":
         default="both",
         help="Split to evaluate (default: both — sweeps val then applies to test)",
     )
-    args = parser.parse_args()
-    main(args.split)
+    parser.add_argument(
+        "-y", "--gamma",
+        type=float,
+        default=None,
+        help="RC exponent override (default: read from gel_config.py)",
+    )
+    args  = parser.parse_args()
+    log   = _Tee(Path("results/logs/eval_gel.log"))
+    try:
+        main(args.split, args.gamma)
+    finally:
+        log.close()
+        print(f"Log saved → results/logs/eval_gel.log", file=log._stdout)

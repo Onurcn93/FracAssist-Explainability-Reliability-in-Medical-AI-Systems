@@ -51,12 +51,18 @@ def apply_gel(p_r, p_d, p_e=None):
     ]
     pairs = [(np.asarray(p, dtype=float), f1) for p, f1 in _candidates if p is not None]
 
-    probs    = [p for p, _ in pairs]
-    f1s      = [f1 for _, f1 in pairs]
-    total_f1 = sum(f1s)
+    probs = [p for p, _ in pairs]
+    f1s   = [f1 for _, f1 in pairs]
 
-    # Step 2 — RC initialisation (F1-normalised classifier weights)
-    rcs = [np.full_like(p, f1 / total_f1) for p, f1 in zip(probs, f1s)]
+    # Step 2 — RC initialisation (Expert-Dominant shifted exponential)
+    # RC_i = (F1_i + base_shift)^gamma / sum((F1_j + base_shift)^gamma)
+    # Amplifies the gap between top and bottom performers; base_shift keeps all
+    # values above 1.0 after shifting so the exponent works in the right direction.
+    gamma      = cfg["gel_gamma"]
+    base_shift = cfg["gel_base_shift"]
+    shifted    = [(max(f1, 0.5) + base_shift) ** gamma for f1 in f1s]
+    total_shifted = sum(shifted)
+    rcs = [np.full_like(p, s / total_shifted) for p, s in zip(probs, shifted)]
 
     # Step 3 — Asymmetric OAM
     mu = sum(probs) / len(probs)

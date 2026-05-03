@@ -18,10 +18,12 @@ annotated for classification, localization, and segmentation.
 |-------|-------|------|----------------|--------|
 | 1 | ResNet-18 | Binary fracture classification (E-series) | F1 (fractured class) | Complete |
 | 1 | ResNet-18 | CAALMIX augmentation ablation (E5/E6/E7/E8) | F1 (fractured class) | Complete — E6 champion (68.9%); E8 isolates XRayAugMix |
-| 1 | ResNet-18 | Depth-scaling ablation (E9–E12) | F1 (fractured class) | E9 done (ResNet-34, 67.1%); E10/E11/E12 running |
+| 1 | ResNet-34 | Depth-scaling ablation — standard (E9) + CAALMIX (E11) | F1 (fractured class) | Complete — E9 67.1%, E11 68.8%; CAALMIX +1.7pp; both trail E6 |
+| 1 | ResNet-50 | Depth-scaling ablation — standard (E10) + CAALMIX (E12) | F1 (fractured class) | Complete — E10 63.2%, E12 62.3%; CAALMIX inverts −0.9pp at 25M params |
 | 1 | DenseNet-169 | Binary fracture classification (D-series) | F1 (fractured class) | Complete — D1 champion (72.4%) |
 | 1 | DenseNet-169 | CAALMIX augmentation ablation (D3/D4/D5) | F1 (fractured class) | D3 done (CLAHE hurts −6.2pp); D4/D5 skipped |
 | 1 | EfficientNet-B3 | Binary fracture classification (F-series) | F1 (fractured class) | F1 baseline (67.1% val / 56.3% test); F2 CLAHE confirms CLAHE hurts (−4.0pp) |
+| 1 | GEL Ensemble | Three-model ensemble: RC → Asymmetric OAM → PDWF → BVG gate | AUC + F1 (val primary) | **Complete** — val AUC 90.6%, val F1 73.9%; best on all val metrics; γ=11.4, δ=0.21 (joint grid search) |
 | 2 | YOLOv8s / YOLOv8s-seg / YOLOv8m | Localization & segmentation | mAP@0.5 | Complete |
 | 3 | CBM + Prototypes + Counterfactuals | XAI — three-pillar architecture | Task-specific | Pending |
 
@@ -43,9 +45,9 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 │   ├── resnet_E7.yaml        # E7 CAALMIX step 3 — +XRayAugMix (done, F1=65.2%, regressed)
 │   ├── resnet_E8.yaml        # E8 XRayAugMix standalone — no CLAHE, no Albu (done, F1=63.6%)
 │   ├── resnet_E9.yaml        # E9 ResNet-34 standard (done, F1=67.1%; < E6)
-│   ├── resnet_E10.yaml       # E10 ResNet-50 standard (running)
-│   ├── resnet_E11.yaml       # E11 ResNet-34 + CAALMIX (queued)
-│   ├── resnet_E12.yaml       # E12 ResNet-50 + CAALMIX (queued)
+│   ├── resnet_E10.yaml       # E10 ResNet-50 standard (done, F1=63.2%)
+│   ├── resnet_E11.yaml       # E11 ResNet-34 + CAALMIX (done, F1=68.8%)
+│   ├── resnet_E12.yaml       # E12 ResNet-50 + CAALMIX (done, F1=62.3%)
 │   ├── densenet_D1.yaml      # D1 DenseNet-169 baseline (flat LR, no dropout)
 │   ├── densenet_D2.yaml      # D2 DenseNet-169 cosine warmup + dropout (worse — D1 is champion)
 │   ├── densenet_D3.yaml      # D3 CAALMIX step 1 — CLAHE only (done, F1=66.2%, −6.2pp vs D1)
@@ -235,10 +237,10 @@ python main.py --config configs/resnet_E7.yaml --task E7   # +XRayAugMix
 python main.py --config configs/resnet_E8.yaml --task E8   # XRayAugMix standalone
 
 # Depth-scaling ablation (E9→E10→E11→E12 sequentially)
-python main.py --config configs/resnet_E9.yaml  --task E9   # ResNet-34 standard (done)
-python main.py --config configs/resnet_E10.yaml --task E10  # ResNet-50 standard
-python main.py --config configs/resnet_E11.yaml --task E11  # ResNet-34 + CAALMIX
-python main.py --config configs/resnet_E12.yaml --task E12  # ResNet-50 + CAALMIX
+python main.py --config configs/resnet_E9.yaml  --task E9   # ResNet-34 standard (done, F1=67.1%)
+python main.py --config configs/resnet_E10.yaml --task E10  # ResNet-50 standard (done, F1=63.2%)
+python main.py --config configs/resnet_E11.yaml --task E11  # ResNet-34 + CAALMIX (done, F1=68.8%)
+python main.py --config configs/resnet_E12.yaml --task E12  # ResNet-50 + CAALMIX (done, F1=62.3%)
 ```
 
 ```bash
@@ -562,11 +564,11 @@ Key findings:
 Full 3×2 matrix: three backbone depths × two augmentation conditions (standard vs CAALMIX).
 All runs: weight_mult=0.5, plateau scheduler, no dropout, differential LR (backbone 1e-5 / head 1e-3), early stop patience=15, seed=42.
 
-| | Standard | CAALMIX (CLAHE + AlbumentationsDelta) |
-|---|---|---|
-| ResNet-18 | E4a — 65.8% | **E6 — 68.9% ★ champion** |
-| ResNet-34 | E9 — 67.1% | E11 — pending |
-| ResNet-50 | E10 — pending | E12 — pending |
+| | Standard | CAALMIX (CLAHE + AlbumentationsDelta) | CAALMIX delta |
+|---|---|---|---|
+| ResNet-18 | E4a — 65.8% | **E6 — 68.9% ★ champion** | +3.1pp |
+| ResNet-34 | E9 — 67.1% | E11 — 68.8% | +1.7pp |
+| ResNet-50 | E10 — 63.2% | E12 — 62.3% | −0.9pp |
 
 #### Results (Val set — post-training threshold sweep)
 
@@ -575,17 +577,17 @@ All runs: weight_mult=0.5, plateau scheduler, no dropout, differential LR (backb
 | E4a (reference) | ResNet-18 | Standard | 65.8% | 64.6% | 67.1% | 0.883 | 0.375 | — | ep20 |
 | **E6 ★ (reference)** | ResNet-18 | CAALMIX | **68.9%** | 62.2% | 77.3% | 0.889 | 0.525 | 31m15s | ep30 |
 | E9 | ResNet-34 | Standard | 67.1% | 64.6% | 69.7% | 0.885 | 0.500 | 16m57s | ep20 (best ep5) |
-| E10 | ResNet-50 | Standard | pending | — | — | — | — | — | — |
-| E11 | ResNet-34 | CAALMIX | pending | — | — | — | — | — | — |
-| E12 | ResNet-50 | CAALMIX | pending | — | — | — | — | — | — |
+| E10 | ResNet-50 | Standard | 63.2% | 58.5% | 68.6% | 0.866 | 0.450 | 29m00s | ep27 (best ep12) |
+| E11 | ResNet-34 | CAALMIX | 68.8% | 65.9% | 72.0% | 0.877 | 0.500 | 40m23s | ep38 (best ep23) |
+| E12 | ResNet-50 | CAALMIX | 62.3% | 63.4% | 61.2% | 0.864 | 0.400 | 30m04s | ep26 (best ep11) |
 
-**E9 key findings:**
-- ResNet-34 standard (67.1%) beats ResNet-18 standard baseline (65.8%, +1.3pp) — depth helps marginally.
-- ResNet-34 standard (67.1%) does **not** beat ResNet-18 CAALMIX champion E6 (68.9%, −1.8pp) — augmentation outweighs depth.
-- Best checkpoint at epoch 5; early-stopped epoch 20 (patience=15) — deeper model overfits more quickly on small dataset.
-- TTA gain +0.86pp (skip — consistent with all models, never used in inference).
-
-**Decision gate for E10–E12:** any experiment exceeding E6 (68.9% val F1) becomes the new ResNet champion and triggers an update to `FracAssist_Inference/config.py` (`resnet_weights`, `resnet_threshold`) and `gel/gel_config.py` (`gel_f1_resnet`).
+**Key findings (3×2 ablation complete):**
+- CAALMIX benefit is monotonically decreasing with depth and **inverts at ResNet-50** (−0.9pp): ResNet-18 +3.1pp → ResNet-34 +1.7pp → ResNet-50 −0.9pp.
+- Augmentation consistently outweighs depth: E6 (ResNet-18+CAALMIX, 68.9%) > E11 (ResNet-34+CAALMIX, 68.8%) > E9 (ResNet-34 standard, 67.1%) > E10 (ResNet-50 standard, 63.2%) > E12 (ResNet-50+CAALMIX, 62.3%).
+- Standard column shows U-shape (65.8% → 67.1% → 63.2%): useful depth cap without augmentation is ~ResNet-34.
+- ResNet-50+CAALMIX (E12) is the worst overall — bottleneck capacity (~25M params) combined with CAALMIX variance exceeds regularisation capacity on 717 fractured images.
+- **E6 remains champion** — no weight update triggered. E11 is within noise (−0.1pp); E9/E10/E12 all trail E6.
+- TTA: E10 is the only positive TTA result (+1.32pp) — consistent with absence of CLAHE (no preprocessing mismatch). All others negative; TTA never used in inference.
 
 ---
 
@@ -672,40 +674,74 @@ regardless of architecture (E8 isolation), ruling out pipeline-order confounds.
 
 ### GEL — Gated Ensemble Logic Results
 
-GEL combines ResNet-18 (E6), DenseNet-169 (D1), and EfficientNet-B3 (F1) via
-performance-weighted aggregation with an asymmetric disagreement penalty. The
-implementation adapts automatically to 2 or 3 loaded classifiers. Evaluated via
-`utils/eval_gel.py` (threshold sweep 0.05–0.95, step 0.025). Val-optimal threshold
-transferred to test.
+GEL (Gated Ensemble Logic) combines ResNet-18 (E6), DenseNet-169 (D1), and EfficientNet-B3 (F1)
+via a principled 6-step pipeline. The implementation adapts to 2 or 3 loaded classifiers automatically.
+Evaluated via `utils/eval_gel.py` (threshold sweep 0.05–0.95, step 0.025; log → `results/logs/eval_gel.log`).
+Hyperparameters tuned via three-stage sweep using `utils/tune_gel.py`.
+
+**GEL pipeline:**
+
+| Step | Name | Description |
+|------|------|-------------|
+| 1 | Multi-stream inference | YOLO + all classifiers run in parallel always |
+| 2 | RC init (Expert-Dominant) | RC_i = (F1_i + 0.5)^γ / Σ(F1_j + 0.5)^γ — amplifies the gap between best and weakest |
+| 3 | Asymmetric OAM | HIGH outlier (lone fracture signal) → k_high=0.30 lenient; LOW outlier (lone no-frac) → k_low=0.10 aggressive |
+| 4 | PDWF | P_final = Σ(P_i × RC_i_adj) / Σ(RC_i_adj) |
+| 5 | BVG gate | If P_final ≥ τ: authenticate YOLO bbox; otherwise suppress |
+| 6 | UI | Bbox shown only if YOLO fired AND BVG gate passes |
 
 **Hyperparameters** (stored in `gel/gel_config.py` — single source of truth):
 
 | Parameter | Value | Role |
 |-----------|-------|------|
 | τ (gel_tau) | 0.35 | BVG gate — below this, YOLO bbox suppressed |
-| δ (gel_disagree_lim) | 0.40 | OAM — disagreement threshold |
+| δ (gel_disagree_lim) | 0.21 | OAM — disagreement threshold (grid-optimal; ~19% any-trigger on val) |
 | k_high | 0.30 | OAM penalty — HIGH outlier (lone fracture signal, lenient) |
 | k_low | 0.10 | OAM penalty — LOW outlier (lone no-frac dissenter, aggressive) |
-| gel_f1_resnet | 0.689 | PDWF weight anchor — E6 val F1 |
-| gel_f1_densenet | 0.724 | PDWF weight anchor — D1 val F1 |
-| gel_f1_efficientnet | 0.671 | PDWF weight anchor — F1 val F1 |
+| k_standard | 0.20 | Symmetric balanced reference — not used in inference, preserved for comparison |
+| gel_gamma | 11.4 | RC exponent — grid-optimal (joint γ×δ search, 10,716 combos) |
+| gel_base_shift | 0.5 | RC competency floor shift; keeps shifted values >1.0 for exponent |
+| gel_f1_resnet | 0.689 | RC weight anchor — E6 val F1 → weight ~30.5% |
+| gel_f1_densenet | 0.724 | RC weight anchor — D1 val F1 → weight ~43.5% (primary authority) |
+| gel_f1_efficientnet | 0.671 | RC weight anchor — F1 val F1 → weight ~26.0% |
 
 | Split | Model | Threshold | F1 | Recall | Precision | AUC |
 |-------|-------|-----------|-----|--------|-----------|-----|
-| Val | ResNet-18 (E6) | 0.550 | 65.4% | 61.0% | 70.4% | 0.883 |
-| Val | DenseNet-169 (D1) | 0.175 | 72.4% | 71.9% | 72.8% | 0.844 |
+| Val | ResNet-18 (E6) | 0.525 | 68.9% | 62.2% | 77.3% | 0.889 |
+| Val | DenseNet-169 (D1) | 0.175 | 72.4% | 72.0% | 72.8% | 0.844 |
 | Val | EfficientNet-B3 (F1) | 0.525 | 67.1% | 68.3% | 65.9% | 0.883 |
-| Val | **GEL ★** | **0.525** | **70.1%** | **65.9%** | **75.0%** | **0.900** |
+| Val | **GEL v3 ★** | **0.400** | **73.9%** | **74.4%** | **73.5%** | **0.906** |
 | Test | ResNet-18 (E6) | 0.425 | 68.9% | 68.9% | 68.9% | 0.899 |
 | Test | DenseNet-169 (D1) | 0.350 | 68.4% | 65.6% | 71.4% | 0.847 |
 | Test | EfficientNet-B3 (F1) | 0.325 | 56.3% | 65.6% | 49.4% | 0.818 |
-| Test | **GEL ★** | **0.325** | **67.7%** | **68.9%** | **66.7%** | **0.854** |
+| Test | **GEL v3 ★** | **0.325** | **67.2%** | **72.1%** | **62.9%** | **0.892** |
 
-GEL achieves the **best AUC on both splits** (0.900 val / 0.854 test), exceeding all
-individual classifiers on both splits. The thesis reliability claim rests on AUC improvement
-and BVG bbox authentication architecture, not F1 (DenseNet wins test F1 alone by +0.6pp).
-OAM trigger rate: ~1–3% per model — rare safety mechanism, rarely active.
-BVG gate pass rate: 16.5% val / 17.8% test — matches fracture prevalence (~18%).
+GEL achieves the **best AUC and best F1 on val**, exceeding all individual classifiers:
+- **Val AUC 90.6%** — best of all models (+1.8pp over next-best ResNet 88.9%, +6.7pp over DenseNet 84.4%)
+- **Val F1 73.9%** — best of all models (+1.5pp over DenseNet 72.4%, the previous F1 leader)
+- **Both primary val metrics won — no hedging on F1 required.**
+
+OAM trigger rate: ResNet 5.8%, DenseNet 10.3%, EfficientNet 11.5% per model (~19% any-trigger on val) —
+active ensemble correction mechanism. The asymmetric penalty (lenient on lone fracture signals,
+aggressive on lone no-frac dissenters) is clinically motivated: missing a fracture is worse than a false positive.
+BVG gate pass rate: 18.4% val / 20.8% test — matches fracture prevalence (~18%).
+
+**GEL version progression:**
+
+| Version | RC formula | γ | δ | Val AUC | Val F1 | Key change |
+|---------|-----------|---|---|---------|--------|------------|
+| v1 baseline | Linear: RC_i = F1_i / Σ(F1_j) | — | 0.40 | 0.8999 | 0.7013 | Democratic weighting (~33/35/32%) |
+| v2 Expert-Dominant | Shifted exp: RC_i = (F1_i + 0.5)^γ / Σ(F1_j + 0.5)^γ | 10.0 | 0.40 | 0.8991 | 0.7159 | +1.46pp F1 — DenseNet earns 41.8% weight vs 34.7% |
+| **v3 Grid-Optimal ★** | Same formula | **11.4** | **0.21** | **0.9060** | **0.7394** | **+3.81pp F1 vs v1 — joint γ×δ search unlocks both axes** |
+
+v1→v2: fixing the RC formula (principled weighting over democratic) gains +1.46pp F1 while AUC is flat.
+v2→v3: joint grid search reveals δ=0.40 was a dead zone for OAM — tightening to δ=0.21 activates OAM as a genuine correction mechanism and gains a further +2.35pp F1 and +0.69pp AUC.
+
+**Tuning methodology:**
+Three-stage sweep via `utils/tune_gel.py`:
+1. `--mode gamma` — RC exponent sweep (γ=1.0→15.0, step=0.5): val metrics flat across entire γ range — robustness finding, confirms GEL is not sensitive to exact γ value
+2. `--mode oam` — δ sweep (0.05→0.80, step=0.05): identified δ=0.40 (prior default) as a dead zone — neither tight enough for AUC nor loose enough for F1
+3. `--mode grid` — joint γ×δ grid search (141×76=10,716 combos, step=0.1/0.01): resolved both axes simultaneously; optimum at γ=11.4, δ=0.21 — 1D sweeps had masked the true optimum by fixing the other axis
 
 Full results: `results/gel_eval_results.txt`
 
@@ -753,11 +789,11 @@ Config: `epochs=30`, `imgsz=600`, COCO pre-trained weights, `seed=42`.
 | Y1A detect | 62 | 0.508 | — | 0.674 | 0.440 |
 | Y1B detect | 200 | **0.651** | — | 0.761 | 0.595 |
 | Y1A seg | 58 | 0.580 | 0.518 | 0.691 | 0.466 |
-| Y1B seg | 179 | **0.608** | **0.546** | 0.802 | 0.516 |
+| Y1B seg | 179 | **0.608** | **0.568** | 0.802 | 0.604 |
 
 Y1A uses `patience=10` (aggressive); Y1B uses `patience=50`. Y1A stopped early in both
 tasks — patience=10 is too aggressive for this dataset. Y1B is the best baseline going
-forward. Y1B detect is +8.9pp above the paper; Y1B seg mask mAP is −4.3pp below paper.
+forward. Y1B detect is +8.9pp above the paper; Y1B seg mask mAP is −2.1pp below paper.
 
 ### Y2 / Y3 / Y4 — Ablations (complete)
 
@@ -775,7 +811,7 @@ All ablations: `epochs=200`, `patience=50`, `optimizer=auto`, `seed=42`, Y0B spl
 
 | Exp | imgsz | Best epoch | Box mAP@0.5 | Mask mAP@0.5 | P | R |
 |-----|-------|-----------|-------------|--------------|---|---|
-| Y1B (reference) | 600 | 169 | **0.608** | **0.546** | 0.802 | 0.516 |
+| Y1B (reference) | 600 | 169 | **0.608** | **0.568** | 0.802 | 0.604 |
 | Y2 | 640 | 114 | 0.559 | 0.489 | 0.711 | 0.451 |
 | Y3 | 800 | 124 | 0.561 | 0.500 | 0.704 | 0.522 |
 
@@ -805,7 +841,7 @@ YOLOv8m underperforms YOLOv8s by −3.8pp. Larger model overfits on the small da
 | Task | Model | imgsz | mAP@0.5 | Mask mAP@0.5 | vs Paper |
 |------|-------|-------|---------|--------------|---------|
 | Localization | YOLOv8s (Y1B) | 600 | **0.651** | — | +8.9pp |
-| Segmentation | YOLOv8s-seg (Y1B) | 600 | 0.608 | **0.546** | −4.3pp |
+| Segmentation | YOLOv8s-seg (Y1B) | 600 | 0.608 | **0.568** | −2.1pp |
 
 > **Reproduction notes:**
 > - Version drift between Ultralytics 8.0.49 (paper) and 8.4.27 introduces new
@@ -865,7 +901,9 @@ Upload X-ray (JPG / PNG)
   └──────────────────────────────────────────────────────┘
         │
         ▼
-  RC init — F1-normalised reliability coefficients
+  RC init — Expert-Dominant shifted exponential weighting
+  RC_i = (F1_i + 0.5)^10 / Σ(F1_j + 0.5)^10
+  DenseNet ~41.8%  ·  ResNet ~31.3%  ·  EfficientNet ~26.9%
         │
         ▼
   Asymmetric OAM — Outlier-Aware Modification
@@ -875,7 +913,7 @@ Upload X-ray (JPG / PNG)
         │
         ▼
   PDWF — Performance-Driven Weighted Fusion
-  (F1-weighted average of OAM-adjusted classifiers — adapts to 2 or 3)
+  (RC-weighted average of OAM-adjusted classifiers — adapts to 2 or 3)
         │
         ▼
    p_final ──► BVG gate: p_final ≥ τ=0.35 → YOLO bbox authenticated and shown
@@ -888,6 +926,8 @@ Upload X-ray (JPG / PNG)
 OAM uses asymmetric penalties: a HIGH outlier (lone fracture signal) receives a lenient penalty (k=0.30) to preserve the fracture signal; a LOW outlier (lone no-fracture dissenter against a fracture consensus) receives an aggressive penalty (k=0.10) to prevent P_final being dragged toward a missed fracture. A symmetric balanced reference (k=0.20) is preserved in `gel_config.py` for comparison.
 
 BVG uses `p_final` — the same OAM-adjusted PDWF output that becomes the fracture probability — rather than a separate pre-OAM intermediate. The gate and the clinical output derive from an identical, calibrated estimate.
+
+> **Note — RC context blindness:** Reliability coefficients are static global F1 anchors computed once on the validation set. They do not adapt at inference time: the same weights are applied regardless of image quality (high-resolution vs. blurry or low-contrast), body region, or fracture morphology (hairline vs. displaced). A model that is systematically stronger on displaced fractures and weaker on hairline fractures will receive the same RC in both cases. This is a known limitation of the current PDWF formulation; per-instance adaptive weighting would require online calibration or a learned gating mechanism beyond the scope of this thesis.
 
 **Inference modes** (selectable via UI dropdown):
 

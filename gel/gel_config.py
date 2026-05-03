@@ -32,11 +32,20 @@ GEL_CONFIG = {
     "gel_f1_densenet":        0.724,   # D1 val F1
     "gel_f1_efficientnet":    0.671,   # F1 val F1 (confirmed 2026-04-28 — val F1=0.6707 @ thr=0.525)
 
+    # RC — Expert-Dominant shifted exponential weighting
+    # RC_i = (F1_i + base_shift)^gamma / sum((F1_j + base_shift)^gamma)
+    # base_shift anchors all values above 0.5 (competency floor); gamma amplifies the gap.
+    # gamma=11.4 produces DenseNet ~43.5% / ResNet ~30.5% / EfficientNet ~26.0%
+    # grid-optimal (γ×δ joint search, 2026-05-03): val AUC=0.9060, val F1=0.7394
+    "gel_gamma":              11.4,    # Exponent — seniority dial (grid-optimal, search range 1.0–15.0)
+    "gel_base_shift":         0.5,     # Competency floor shift (all F1 >= 0.5 enforced)
+
     # BVG gate threshold — below this, YOLO bbox is suppressed
     "gel_tau":                0.35,
 
     # OAM — disagreement limit and asymmetric penalty factors
-    "gel_disagree_lim":       0.40,
+    # grid-optimal δ=0.21 (tight OAM, ~19% trigger rate on val) — active correction mechanism
+    "gel_disagree_lim":       0.21,
     "gel_penalty_k_low":      0.10,    # LOW outlier  — aggressive: lone no-frac dissenter against fracture consensus
     "gel_penalty_k_high":     0.30,    # HIGH outlier — lenient:    lone fracture signal against no-frac consensus
     "gel_penalty_k_standard": 0.20,    # Balanced symmetric reference (not used in OAM — preserved for comparison)
