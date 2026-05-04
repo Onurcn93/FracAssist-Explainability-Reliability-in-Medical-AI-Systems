@@ -86,6 +86,14 @@ def fractatlas_image(filename):
     return make_response("Not found", 404)
 
 
+@app.route("/review/images/<filename>")
+def review_image(filename):
+    path = os.path.join(_REVIEW_IMAGES_DIR, filename)
+    if os.path.isfile(path):
+        return send_file(path)
+    return make_response("Not found", 404)
+
+
 @app.route("/review-queue", methods=["GET"])
 def review_queue():
     rows = []
@@ -200,6 +208,10 @@ def cancel_review():
         writer = csv.DictWriter(f, fieldnames=_CSV_FIELDS)
         writer.writeheader()
         writer.writerows(filtered)
+
+    thumb = os.path.join(_REVIEW_IMAGES_DIR, image_id)
+    if os.path.isfile(thumb):
+        os.remove(thumb)
 
     return jsonify({"status": "ok"})
 

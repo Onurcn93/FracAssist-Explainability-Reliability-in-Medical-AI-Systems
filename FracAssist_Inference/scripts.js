@@ -327,8 +327,8 @@ function applyPrediction(data) {
     document.getElementById('status-dot').className  = 'status-dot ' + (isFrac ? 'dot-red' : 'dot-teal');
     const _modeLabels  = { 'YOLO-ONLY': 'YOLO ONLY', 'CLASSIFIER-ONLY': 'CLASSIFIER ONLY',
                            'GEL': 'GEL ENSEMBLE',   'GEL-DEGRADED': 'GEL DEGRADED' };
-    const _modelLabels = { 'YOLO-ONLY': 'Y1B',      'CLASSIFIER-ONLY': 'E4a · D1 · F1',
-                           'GEL': 'Y1B · E4a · D1 · F1', 'GEL-DEGRADED': 'partial models' };
+    const _modelLabels = { 'YOLO-ONLY': 'Y1B',      'CLASSIFIER-ONLY': 'E6 · D1 · F1',
+                           'GEL': 'Y1B · E6 · D1 · F1', 'GEL-DEGRADED': 'partial models' };
     document.getElementById('status-text').textContent  = _modeLabels[data.mode]  || data.mode;
     document.getElementById('status-model').textContent = _modelLabels[data.mode] || '';
 

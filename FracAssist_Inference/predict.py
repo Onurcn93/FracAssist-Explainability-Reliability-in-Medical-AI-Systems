@@ -476,7 +476,7 @@ def predict(image_path, config, inference_mode="gel"):
             result["gel_consensus"]   = None
 
         result["fracture_probability"] = p_final
-        result["label"] = "Fractured" if p_final >= 0.5 else "Non-Fractured"
+        result["label"] = "Fractured" if p_final >= config["gel_classification_threshold"] else "Non-Fractured"
 
         # Authenticated bbox: YOLO fired AND BVG gate passed
         if best and gate_passed:

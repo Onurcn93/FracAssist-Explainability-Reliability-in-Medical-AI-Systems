@@ -9,8 +9,8 @@ Modes
   gamma   Sweep gel_gamma 1–15; report val AUC, val F1, test AUC, test F1
           for each value. Identifies the gamma that maximises val F1.
 
-  oam     Sweep gel_disagree_lim 0.05–0.80 step 0.05 (gamma fixed at 10,
-          penalties unchanged). Reports val AUC, val F1, OAM trigger rate.
+  oam     Sweep gel_disagree_lim 0.05–0.80 step 0.05 (gamma fixed at current
+          GEL_CONFIG value, penalties unchanged). Reports val AUC, val F1, OAM trigger rate.
 
   grid    Joint grid search over gamma (step 0.1) × delta (step 0.01).
           Produces 3D surface plots for val AUC and val F1. Reports the

@@ -92,7 +92,7 @@
                     <div class="model-card">
                         <div class="model-card-title">ResNet-18</div>
                         <div class="model-card-value" id="resnet-val">—</div>
-                        <div class="model-card-sub" id="resnet-sub">E4a</div>
+                        <div class="model-card-sub" id="resnet-sub">E6</div>
                     </div>
                     <div class="model-card">
                         <div class="model-card-title">DenseNet-169</div>
@@ -221,14 +221,120 @@
                     <div class="health-row"><span>F1 (Fractured)</span><span class="text-teal">73.94% val / 67.18% test (sweep-opt) — best of all models on val</span></div>
                     <div class="health-row"><span>AUC</span><span class="text-teal">0.9060 val / 0.8916 test — highest on val</span></div>
                     <div class="health-row"><span>Threshold</span><span>0.400 val-optimal · 0.325 test-sweep</span></div>
-                    <div class="health-row"><span>RC — Expert-Dominant (γ=11.4)</span><span class="text-teal">ResNet ~30.5% · DenseNet ~43.5% · EfficientNet ~26.0%</span></div>
+                    <div class="health-row"><span>RC — Expert-Dominant (γ=11.4)</span><span class="text-teal">ResNet ~30.9% · DenseNet ~43.1% · EfficientNet ~26.0%</span></div>
                     <div class="health-row"><span>OAM — Asymmetric (δ=0.21)</span><span>|p_i − μ| &gt; 0.21 · HIGH outlier k=0.30 (lenient) · LOW outlier k=0.10 (aggressive) · ~19% trigger on val</span></div>
                     <div class="health-row"><span>PDWF — Performance-Driven Weighted Fusion</span><span class="text-teal">Expert-Dominant weighted fusion · F1 anchors: ResNet 0.689 · DenseNet 0.724 · EfficientNet 0.671</span></div>
-                    <div class="health-row"><span>BVG — Bounding Box Validation Gate</span><span class="text-teal">P_final ≥ τ = 0.35 · gate pass 18.4% val / 20.8% test</span></div>
+                    <div class="health-row"><span>BVG — Binary Verification Gate</span><span class="text-teal">P_final ≥ τ = 0.35 · gate pass 18.4% val / 20.8% test</span></div>
                     <div class="health-row"><span>GradCAM target</span><span>DenseNet-169 denseblock4</span></div>
                     <div class="health-row"><span>Dataset</span><span>FracAtlas · 4,083 X-rays</span></div>
                 </div>
             </div>
+
+            <!-- ── GEL Pipeline Architecture Panel ──────────────────── -->
+            <div class="gel-pipeline-section">
+                <h2 class="panel-title gel-pipeline-gap">GEL v3 — Pipeline Architecture</h2>
+                <div class="gel-pipeline">
+
+                    <!-- Stage 1: RC -->
+                    <div class="gel-stage">
+                        <div class="gel-stage-header">
+                            <span class="gel-stage-num">1</span>
+                            <div>
+                                <div class="gel-stage-abbr">RC</div>
+                                <div class="gel-stage-title">Reliability Calculation</div>
+                                <div class="gel-stage-long">Expert-Dominant Exponential</div>
+                            </div>
+                        </div>
+                        <div class="gel-formula">RC_i = (F1_i + b)^γ / Σ(F1_j + b)^γ</div>
+                        <div class="gel-params">
+                            <div class="gel-param"><span>γ (seniority dial)</span><span class="text-teal">11.4</span></div>
+                            <div class="gel-param"><span>b (competency floor)</span><span class="text-teal">0.5</span></div>
+                        </div>
+                        <div class="gel-weight-bars">
+                            <div class="gel-weight-bar">
+                                <span class="gel-weight-label">DenseNet</span>
+                                <div class="gel-bar-track"><div class="gel-bar-fill" style="width:43.1%"></div></div>
+                                <span class="gel-weight-pct text-teal">43.1%</span>
+                            </div>
+                            <div class="gel-weight-bar">
+                                <span class="gel-weight-label">ResNet</span>
+                                <div class="gel-bar-track"><div class="gel-bar-fill" style="width:30.9%"></div></div>
+                                <span class="gel-weight-pct">30.9%</span>
+                            </div>
+                            <div class="gel-weight-bar">
+                                <span class="gel-weight-label">EfficientNet</span>
+                                <div class="gel-bar-track"><div class="gel-bar-fill" style="width:26%"></div></div>
+                                <span class="gel-weight-pct">26.0%</span>
+                            </div>
+                        </div>
+                        <p class="gel-stage-desc">Expert-Dominant exponent (γ=11.4) amplifies the performance gap, assigning disproportionately higher weight to the best classifier rather than treating all models as equal.</p>
+                    </div>
+
+                    <div class="gel-arrow">▶</div>
+
+                    <!-- Stage 2: OAM -->
+                    <div class="gel-stage">
+                        <div class="gel-stage-header">
+                            <span class="gel-stage-num">2</span>
+                            <div>
+                                <div class="gel-stage-abbr">OAM</div>
+                                <div class="gel-stage-title">Outlier-Aware Modification</div>
+                                <div class="gel-stage-long">Asymmetric</div>
+                            </div>
+                        </div>
+                        <div class="gel-formula">if |p_i − μ| &gt; δ: RC_i × k</div>
+                        <div class="gel-params">
+                            <div class="gel-param"><span>δ (disagree limit)</span><span>0.21</span></div>
+                            <div class="gel-param"><span class="text-teal">HIGH outlier k (lenient)</span><span class="text-teal">0.30</span></div>
+                            <div class="gel-param"><span class="alert-amber">LOW outlier k (aggressive)</span><span class="alert-amber">0.10</span></div>
+                        </div>
+                        <p class="gel-stage-desc"><span class="alert-amber">Asymmetric by design</span> — a lone fracture signal (HIGH: p &gt; μ) is penalised leniently, preserving sensitivity. A lone no-fracture dissenter (LOW: p &lt; μ) against fracture consensus is suppressed aggressively. Missing a fracture is clinically costlier than a false alarm.</p>
+                        <div class="gel-stat-note">~19% trigger rate · val set</div>
+                    </div>
+
+                    <div class="gel-arrow">▶</div>
+
+                    <!-- Stage 3: PDWF -->
+                    <div class="gel-stage">
+                        <div class="gel-stage-header">
+                            <span class="gel-stage-num">3</span>
+                            <div>
+                                <div class="gel-stage-abbr">PDWF</div>
+                                <div class="gel-stage-title">Performance-Driven Weighted Fusion</div>
+                            </div>
+                        </div>
+                        <div class="gel-formula">P_final = Σ(p_i × RC_adj) / Σ RC_adj</div>
+                        <div class="gel-params">
+                            <div class="gel-param"><span>Classification threshold</span><span class="text-teal">0.40</span></div>
+                            <div class="gel-param"><span>Val AUC</span><span class="text-teal">0.9060</span></div>
+                            <div class="gel-param"><span>Val F1</span><span class="text-teal">73.94%</span></div>
+                        </div>
+                        <p class="gel-stage-desc">Weighted average using OAM-adjusted RC weights. YOLO is intentionally excluded — detection mAP is not comparable to classification F1 and must not enter the weighted sum.</p>
+                    </div>
+
+                    <div class="gel-arrow">▶</div>
+
+                    <!-- Stage 4: BVG -->
+                    <div class="gel-stage">
+                        <div class="gel-stage-header">
+                            <span class="gel-stage-num">4</span>
+                            <div>
+                                <div class="gel-stage-abbr">BVG</div>
+                                <div class="gel-stage-title">Binary Verification Gate</div>
+                            </div>
+                        </div>
+                        <div class="gel-formula">pass if P_final ≥ τ = 0.35</div>
+                        <div class="gel-params">
+                            <div class="gel-param"><span>Gate pass — val</span><span class="text-teal">18.4%</span></div>
+                            <div class="gel-param"><span>Gate pass — test</span><span class="text-teal">20.8%</span></div>
+                        </div>
+                        <p class="gel-stage-desc">The classifier ensemble validates YOLO detections. If P_final &lt; τ, the YOLO bounding box is suppressed even if YOLO flagged a region. P_final is always reported regardless of gate outcome.</p>
+                        <div class="gel-stat-note">P_final reported regardless of gate</div>
+                    </div>
+
+                </div>
+            </div>
+
         </section>
 
         <!-- ── TAB: Config ─────────────────────────────────────────── -->
@@ -328,7 +434,7 @@
                         <div class="config-label">OAM Disagreement Limit (δ)</div>
                         <div class="config-sub">Deviation from mean above this flags a model as outlier</div>
                     </div>
-                    <span class="config-val" data-gel-key="gel_disagree_lim">0.40</span>
+                    <span class="config-val" data-gel-key="gel_disagree_lim">0.21</span>
                 </div>
                 <div class="config-row">
                     <div>

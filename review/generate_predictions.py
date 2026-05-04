@@ -66,7 +66,7 @@ BATCH_SIZE    = 32
 RESNET_THRESHOLD       = 0.525   # E6 val-optimal
 DENSENET_THRESHOLD     = 0.175   # D1 val-optimal
 EFFICIENTNET_THRESHOLD = 0.525   # F1 val-optimal
-GEL_THRESHOLD          = 0.525   # GEL val-optimal
+GEL_THRESHOLD          = GEL_CONFIG["gel_classification_threshold"]   # v3 val-optimal (0.40)
 
 # GEL hyperparameters — sourced from gel/gel_config.py
 GEL_F1_RESNET       = GEL_CONFIG["gel_f1_resnet"]

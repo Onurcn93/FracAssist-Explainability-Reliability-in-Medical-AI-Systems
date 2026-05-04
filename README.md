@@ -27,9 +27,11 @@ annotated for classification, localization, and segmentation.
 | 2 | YOLOv8s / YOLOv8s-seg / YOLOv8m | Localization & segmentation | mAP@0.5 | Complete |
 | 3 | — | XAI (CBM + Prototypes + Counterfactuals) | — | Descoped — thesis novelty: GEL ensemble + empirical findings |
 
-Phase 3 is the core thesis contribution: integrating clinically-grounded attribute
-explanations (Pillar 1), precedent-based example retrieval (Pillar 2), and contrastive
-counterfactual explanations (Pillar 3) in a single system for fracture detection.
+Explainability is delivered via GradCAM (DenseNet-169 denseblock4 heatmap) and YOLO
+bounding box detection authenticated by the BVG gate — providing visual evidence alongside
+each prediction for expert radiologist review. The core reliability contribution is
+**GEL (Gated Ensemble Logic)**, supported by empirical findings from the classification
+and detection ablation studies.
 
 ---
 
@@ -92,13 +94,14 @@ counterfactual explanations (Pillar 3) in a single system for fracture detection
 │   ├── eval_resnet.py        # Evaluate all ResNet checkpoints on val/test set
 │   ├── eval_densenet.py      # Evaluate all DenseNet-169 checkpoints on val/test set
 │   ├── eval_efficientnet.py  # Evaluate all EfficientNet-B3 checkpoints on val/test set
-│   └── eval_gel.py           # Evaluate GEL ensemble on val/test — threshold sweep + baselines
+│   ├── eval_gel.py           # Evaluate GEL ensemble on val/test — threshold sweep + baselines
+│   └── tune_gel.py           # GEL hyperparameter tuning — gamma / OAM / joint grid sweeps
 ├── results/                  # Saved metrics and plots
 │   ├── experiments_yolo.csv
 │   ├── experiments_resnet.csv
 │   ├── experiments_densenet.csv
 │   ├── experiments_efficientnet.csv
-│   ├── gel_eval_results.txt          # GEL evaluation output — both splits, baselines vs ensemble
+│   ├── gel_eval_results.log          # GEL evaluation output — both splits, baselines vs ensemble
 │   └── plots/                    # Training curves (gitignored)
 ├── xai/                      # XAI pillar implementations (Phase 3 — pending)
 └── weights/                  # Saved model weights (gitignored)
@@ -701,8 +704,8 @@ Hyperparameters tuned via three-stage sweep using `utils/tune_gel.py`.
 | k_standard | 0.20 | Symmetric balanced reference — not used in inference, preserved for comparison |
 | gel_gamma | 11.4 | RC exponent — grid-optimal (joint γ×δ search, 10,716 combos) |
 | gel_base_shift | 0.5 | RC competency floor shift; keeps shifted values >1.0 for exponent |
-| gel_f1_resnet | 0.689 | RC weight anchor — E6 val F1 → weight ~30.5% |
-| gel_f1_densenet | 0.724 | RC weight anchor — D1 val F1 → weight ~43.5% (primary authority) |
+| gel_f1_resnet | 0.689 | RC weight anchor — E6 val F1 → weight ~30.9% |
+| gel_f1_densenet | 0.724 | RC weight anchor — D1 val F1 → weight ~43.1% (primary authority) |
 | gel_f1_efficientnet | 0.671 | RC weight anchor — F1 val F1 → weight ~26.0% |
 
 | Split | Model | Threshold | F1 | Recall | Precision | AUC |
@@ -863,7 +866,7 @@ A local web app for clinical decision support. Runs entirely offline; no data le
 **Tabs:**
 - **Assist** — Upload X-ray, select inference mode, view GradCAM/bounding box overlay, read per-model probability cards. Zoom via slider or scroll wheel. Send Review button (enabled after prediction) queues the case for expert annotation.
 - **Expert Review** — CSV-driven review queue (Image ID / Preview / Condition / GEL Verdict / Model Output 2×2 / Status). Cancel removes a row. Diagnose panel loads full-resolution original with scroll/slider zoom; expert selects FRACTURED / NON-FRACTURED condition and submits — updates `true_label` and sets `status=diagnosed` in the queue CSV.
-- **Model Status** — Approved baseline metrics (val + test) for all four models + GEL ensemble.
+- **Model Status** — Approved baseline metrics (val + test) for all four models + GEL ensemble. Includes GEL v3 pipeline architecture panel (RC → OAM → PDWF → BVG) with formulas and clinical rationale.
 - **Config** — Inference hyperparameters and GEL architecture parameters (τ, δ, k_low, k_high, F1 anchors). Values are fetched live from the server via `/api/gel-config` and reflect `gel/gel_config.py` — no HTML edits needed when hyperparameters change.
 
 ```bash
@@ -902,12 +905,12 @@ Upload X-ray (JPG / PNG)
         │
         ▼
   RC init — Expert-Dominant shifted exponential weighting
-  RC_i = (F1_i + 0.5)^10 / Σ(F1_j + 0.5)^10
-  DenseNet ~41.8%  ·  ResNet ~31.3%  ·  EfficientNet ~26.9%
+  RC_i = (F1_i + 0.5)^11.4 / Σ(F1_j + 0.5)^11.4
+  DenseNet ~43.1%  ·  ResNet ~30.9%  ·  EfficientNet ~26.0%
         │
         ▼
   Asymmetric OAM — Outlier-Aware Modification
-  (|p_i − μ| > 0.40 triggers penalty; direction determines severity)
+  (|p_i − μ| > 0.21 triggers penalty; direction determines severity)
   HIGH outlier (p_i > μ, lone fracture signal)      → k_high = 0.30  lenient  — preserve fracture signal
   LOW  outlier (p_i < μ, no-frac dissenter)         → k_low  = 0.10  aggressive — protect fracture consensus
         │
@@ -946,6 +949,7 @@ BVG uses `p_final` — the same OAM-adjusted PDWF output that becomes the fractu
 | `POST` | `/predict` | `multipart/form-data` with `image` field → inference JSON |
 | `GET` | `/api/gel-config` | Return `gel/gel_config.py` contents as JSON — used by Config tab to display live values |
 | `GET` | `/fractatlas/<filename>` | Serve full-resolution FracAtlas image by filename (searches Fractured/ and Non_fractured/) |
+| `GET` | `/review/images/<filename>` | Serve 96px thumbnail from `review/images/` (generated at send-review time) |
 | `GET` | `/review-queue` | Return `review/expert_review.csv` as JSON list |
 | `POST` | `/send-review` | Append inference result to review queue; derives `true_label` from FracAtlas folder; 409 on duplicate |
 | `POST` | `/cancel-review` | Remove a row from the queue CSV by `image_id`; 404 if not found |

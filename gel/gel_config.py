@@ -35,13 +35,16 @@ GEL_CONFIG = {
     # RC — Expert-Dominant shifted exponential weighting
     # RC_i = (F1_i + base_shift)^gamma / sum((F1_j + base_shift)^gamma)
     # base_shift anchors all values above 0.5 (competency floor); gamma amplifies the gap.
-    # gamma=11.4 produces DenseNet ~43.5% / ResNet ~30.5% / EfficientNet ~26.0%
+    # gamma=11.4 produces DenseNet ~43.1% / ResNet ~30.9% / EfficientNet ~26.0%
     # grid-optimal (γ×δ joint search, 2026-05-03): val AUC=0.9060, val F1=0.7394
     "gel_gamma":              11.4,    # Exponent — seniority dial (grid-optimal, search range 1.0–15.0)
     "gel_base_shift":         0.5,     # Competency floor shift (all F1 >= 0.5 enforced)
 
     # BVG gate threshold — below this, YOLO bbox is suppressed
     "gel_tau":                0.35,
+
+    # Classification threshold — val-sweep optimal (grid search 2026-05-03)
+    "gel_classification_threshold": 0.40,
 
     # OAM — disagreement limit and asymmetric penalty factors
     # grid-optimal δ=0.21 (tight OAM, ~19% trigger rate on val) — active correction mechanism
