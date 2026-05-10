@@ -66,8 +66,9 @@ and detection ablation studies.
 │   └── yolo_Y5.yaml          # Negative sampling ablation: 1:1 ratio
 ├── gel/                      # GEL framework — single source of truth
 │   ├── __init__.py
-│   ├── gel_config.py         # All GEL hyperparameters (τ, δ, k_low, k_high, F1 anchors)
-│   └── gel_pipeline.py       # Canonical apply_gel() — RC init → OAM → PDWF → BVG
+│   ├── gel_config.py             # All GEL hyperparameters (τ, δ, k_low, k_high, F1 anchors)
+│   ├── gel_pipeline.py           # Canonical apply_gel() — RC init → OAM → PDWF → BVG
+│   └── gel_concept_visualizer.py # RC weight curves (2×1): real 3-model + imaginary 4th; powered (pre-norm) variant
 ├── FracAssist_Inference/     # FracAssist clinical decision support system
 │   ├── app.py                # Flask server — all routes
 │   ├── config.py             # Weight paths, inference thresholds, GEL config (imports gel/)
@@ -95,7 +96,7 @@ and detection ablation studies.
 │   ├── eval_densenet.py      # Evaluate all DenseNet-169 checkpoints on val/test set
 │   ├── eval_efficientnet.py  # Evaluate all EfficientNet-B3 checkpoints on val/test set
 │   ├── eval_gel.py           # Evaluate GEL ensemble on val/test — threshold sweep + baselines
-│   └── tune_gel.py           # GEL hyperparameter tuning — gamma / OAM / joint grid sweeps
+│   └── tune_gel.py           # GEL hyperparameter tuning — gamma sweep / OAM δ sweep / joint γ×δ grid search
 ├── results/                  # Saved metrics and plots
 │   ├── experiments_yolo.csv
 │   ├── experiments_resnet.csv
@@ -742,8 +743,8 @@ v2→v3: joint grid search reveals δ=0.40 was a dead zone for OAM — tightenin
 
 **Tuning methodology:**
 Three-stage sweep via `utils/tune_gel.py`:
-1. `--mode gamma` — RC exponent sweep (γ=1.0→15.0, step=0.5): val metrics flat across entire γ range — robustness finding, confirms GEL is not sensitive to exact γ value
-2. `--mode oam` — δ sweep (0.05→0.80, step=0.05): identified δ=0.40 (prior default) as a dead zone — neither tight enough for AUC nor loose enough for F1
+1. `--mode gamma` — RC exponent sweep (γ=1.0→15.0, step=1.0): val metrics flat across entire γ range — robustness finding, confirms GEL is not sensitive to exact γ value
+2. `--mode oam` — δ sweep (0.05→0.80, step=0.01): identified δ=0.40 (prior default) as a dead zone — neither tight enough for AUC nor loose enough for F1. Produces 4 plots: AUC sweep, F1 sweep, dual-axis val AUC & F1 vs any-trigger rate, per-model trigger rates (R%/D%/E%/any%) vs val F1.
 3. `--mode grid` — joint γ×δ grid search (141×76=10,716 combos, step=0.1/0.01): resolved both axes simultaneously; optimum at γ=11.4, δ=0.21 — 1D sweeps had masked the true optimum by fixing the other axis
 
 Full results: `results/gel_eval_results.log`

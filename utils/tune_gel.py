@@ -192,6 +192,81 @@ def _plot_oam(results, gamma, k_low, k_high):
     print(f"  Plot saved → {out_f1}")
 
 
+def _plot_oam_dual(results, gamma, k_low, k_high):
+    PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+    deltas   = [r["delta"]    for r in results]
+    val_auc  = [r["val_auc"]  for r in results]
+    val_f1   = [r["val_f1"]   for r in results]
+    trig_any = [r["trig_any"] for r in results]
+
+    subtitle  = (f"γ={gamma:.0f}, k_low={k_low}, k_high={k_high}"
+                 f"  |  Trigger: |P$_i$ − μ| > δ  →  RC$_i$ × k")
+
+    fig, ax1 = plt.subplots(figsize=(11, 5))
+    ax2 = ax1.twinx()
+
+    ax1.plot(deltas, val_auc, color="#4C72B0", linewidth=2, label="Val AUC")
+    ax1.plot(deltas, val_f1,  color="#55A868", linewidth=2, label="Val F1")
+    ax2.plot(deltas, trig_any, color="#C44E52", linewidth=2, linestyle="--",
+             label="OAM trigger any% (val)")
+
+    ax1.set_xlabel("OAM Disagree Limit (δ)", fontsize=12)
+    ax1.set_ylabel("Val AUC / Val F1", fontsize=12)
+    ax2.set_ylabel("OAM Trigger Rate any% (val)", fontsize=12, color="#C44E52")
+    ax2.tick_params(axis="y", labelcolor="#C44E52")
+    ax1.set_title(f"GEL OAM: Val AUC & F1 vs Trigger Rate\n{subtitle}", fontsize=12)
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="center right")
+    ax1.grid(True, alpha=0.3)
+
+    out = PLOTS_DIR / "gel_oam_trigger_vs_auc.png"
+    fig.tight_layout()
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    print(f"  Plot saved → {out}")
+
+
+def _plot_oam_trigger_rates(results, gamma, k_low, k_high):
+    PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+    deltas   = [r["delta"]    for r in results]
+    val_f1   = [r["val_f1"]   for r in results]
+    trig_r   = [r["trig_r"]   for r in results]
+    trig_d   = [r["trig_d"]   for r in results]
+    trig_e   = [r["trig_e"]   for r in results]
+    trig_any = [r["trig_any"] for r in results]
+
+    subtitle  = (f"γ={gamma:.0f}, k_low={k_low}, k_high={k_high}"
+                 f"  |  Trigger: |P$_i$ − μ| > δ  →  RC$_i$ × k")
+
+    fig, ax1 = plt.subplots(figsize=(11, 5))
+    ax2 = ax1.twinx()
+
+    ax1.plot(deltas, trig_r,   color="#4C72B0", linewidth=2, label="ResNet %")
+    ax1.plot(deltas, trig_d,   color="#DD8452", linewidth=2, label="DenseNet %")
+    ax1.plot(deltas, trig_e,   color="#8172B2", linewidth=2, label="EfficientNet %")
+    ax1.plot(deltas, trig_any, color="#C44E52", linewidth=2, linestyle="--", label="Any model %")
+    ax2.plot(deltas, val_f1,   color="#55A868", linewidth=2, linestyle=":",  label="Val F1")
+
+    ax1.set_xlabel("OAM Disagree Limit (δ)", fontsize=12)
+    ax1.set_ylabel("OAM Trigger Rate % (val)", fontsize=12)
+    ax2.set_ylabel("Val F1", fontsize=12, color="#55A868")
+    ax2.tick_params(axis="y", labelcolor="#55A868")
+    ax1.set_title(f"GEL OAM: Per-Model Trigger Rates vs Val F1\n{subtitle}", fontsize=12)
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="upper right")
+    ax1.grid(True, alpha=0.3)
+
+    out = PLOTS_DIR / "gel_oam_trigger_rates.png"
+    fig.tight_layout()
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    print(f"  Plot saved → {out}")
+
+
 def _plot_grid(G, D, val_auc_grid, val_f1_grid):
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
     best_auc_idx = np.unravel_index(np.argmax(val_auc_grid), val_auc_grid.shape)
@@ -335,6 +410,8 @@ def mode_oam(df, step):
           f"  test_AUC={best_tauc['test_auc']:.4f}  test_F1={best_tauc['test_f1']:.4f}")
     print()
     _plot_oam(results, gamma, k_low, k_high)
+    _plot_oam_dual(results, gamma, k_low, k_high)
+    _plot_oam_trigger_rates(results, gamma, k_low, k_high)
 
 
 def mode_grid(df, gamma_step, delta_step):
@@ -413,7 +490,12 @@ class _Tee:
 
 def main(mode, step, gamma_step, delta_step):
     if step is None:
-        step = 1.0 if mode == "gamma" else 0.05
+        if mode == "gamma":
+            step = 1.0
+        elif mode == "oam":
+            step = 0.01
+        else:
+            step = 0.05
 
     if not ALL_CSV.exists():
         raise FileNotFoundError(f"Predictions file not found: {ALL_CSV}")
@@ -447,7 +529,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--step", type=float, default=None,
-        help="Step size for gamma/oam sweep (gamma default: 1.0, oam default: 0.05)",
+        help="Step size for gamma/oam sweep (gamma default: 1.0, oam default: 0.01)",
     )
     parser.add_argument(
         "--gamma-step", type=float, default=0.1,
