@@ -747,6 +747,14 @@ Three-stage sweep via `utils/tune_gel.py`:
 2. `--mode oam` — δ sweep (0.05→0.80, step=0.01): identified δ=0.40 (prior default) as a dead zone — neither tight enough for AUC nor loose enough for F1. Produces 4 plots: AUC sweep, F1 sweep, dual-axis val AUC & F1 vs any-trigger rate, per-model trigger rates (R%/D%/E%/any%) vs val F1.
 3. `--mode grid` — joint γ×δ grid search (141×76=10,716 combos, step=0.1/0.01): resolved both axes simultaneously; optimum at γ=11.4, δ=0.21 — 1D sweeps had masked the true optimum by fixing the other axis
 
+```bash
+# RC concept visualisation — run after tuning to produce presentation plots
+python gel/gel_concept_visualizer.py                          # defaults: γ ∈ [1, 15], imaginary F1=0.80
+python gel/gel_concept_visualizer.py --gamma-max 20 --extra-f1 0.85
+# Outputs → results/plots/gel_rc_concept.png (normalised RC weights 2×1)
+#           results/plots/gel_rc_concept_powered.png (pre-normalisation powered values 2×1)
+```
+
 Full results: `results/gel_eval_results.log`
 
 ---
@@ -932,6 +940,21 @@ OAM uses asymmetric penalties: a HIGH outlier (lone fracture signal) receives a 
 BVG uses `p_final` — the same OAM-adjusted PDWF output that becomes the fracture probability — rather than a separate pre-OAM intermediate. The gate and the clinical output derive from an identical, calibrated estimate.
 
 > **Note — RC context blindness:** Reliability coefficients are static global F1 anchors computed once on the validation set. They do not adapt at inference time: the same weights are applied regardless of image quality (high-resolution vs. blurry or low-contrast), body region, or fracture morphology (hairline vs. displaced). A model that is systematically stronger on displaced fractures and weaker on hairline fractures will receive the same RC in both cases. This is a known limitation of the current PDWF formulation; per-instance adaptive weighting would require online calibration or a learned gating mechanism beyond the scope of this thesis.
+
+**When GEL works — and when it does not**
+
+GEL is a *reliability architecture via calibrated expert complementarity*: its reliability guarantee holds only when ensemble members are diverse enough to correct each other's failures. Three conditions must hold simultaneously:
+
+1. **Each model is a true estimator** (~0.65–0.80 F1). Below this floor, a model introduces more noise than it corrects.
+2. **Architectures are structurally diverse** — different inductive biases, different failure modes. The FracAssist trio (ResNet-18 global features / DenseNet-169 dense reuse / EfficientNet-B3 compound scaling) satisfies this by design.
+3. **No single model dominates** (roughly below ~0.87 F1). If one model reaches ~0.90, the weaker models dilute it more than they correct it — use the dominant model alone instead.
+
+When these conditions break, GEL adds complexity without reliability gain and can actively harm inference:
+- **Correlated errors** (e.g. three ResNets with different seeds share the same blind spots): all models agree confidently on the same failure cases — the ensemble becomes *more* overconfident in the wrong direction than any individual model.
+- **A dominant expert** (~0.90 F1): the weaker models vote incorrectly on the majority of cases the expert gets right, diluting the strong signal.
+- **Homogeneous predictions**: if all three models predict identically, PDWF reduces to a single weighted model — ensemble overhead with no diversity benefit.
+
+The FracAssist ensemble (DenseNet 72.4% / ResNet 68.9% / EfficientNet 67.1%) sits in the optimal regime: close enough in F1 that diversity is preserved (DenseNet earns 43.1% weight at γ=11.4, not 100%), structurally distinct architectures, and empirically complementary failure modes — producing val AUC 90.6% vs. best individual 88.3%.
 
 **Inference modes** (selectable via UI dropdown):
 
