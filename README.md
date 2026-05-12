@@ -96,7 +96,8 @@ and detection ablation studies.
 │   ├── eval_densenet.py      # Evaluate all DenseNet-169 checkpoints on val/test set
 │   ├── eval_efficientnet.py  # Evaluate all EfficientNet-B3 checkpoints on val/test set
 │   ├── eval_gel.py           # Evaluate GEL ensemble on val/test — threshold sweep + baselines
-│   └── tune_gel.py           # GEL hyperparameter tuning — gamma sweep / OAM δ sweep / joint γ×δ grid search
+│   ├── tune_gel.py           # GEL hyperparameter tuning — gamma sweep / OAM δ sweep / joint γ×δ grid search
+│   └── comparative_charts.py # Summary bar charts — CAALMIX architecture selectivity, all-model val comparison, depth-scaling 3×2 matrix
 ├── results/                  # Saved metrics and plots
 │   ├── experiments_yolo.csv
 │   ├── experiments_resnet.csv
@@ -753,6 +754,12 @@ python gel/gel_concept_visualizer.py                          # defaults: γ ∈
 python gel/gel_concept_visualizer.py --gamma-max 20 --extra-f1 0.85
 # Outputs → results/plots/gel_rc_concept.png (normalised RC weights 2×1)
 #           results/plots/gel_rc_concept_powered.png (pre-normalisation powered values 2×1)
+
+# Summary comparison charts — run after all experiments are complete
+python utils/comparative_charts.py
+# Outputs → results/plots/caalmix_architecture_selectivity.png  (3-arch augmentation effect — ResNet/DenseNet/EfficientNet)
+#           results/plots/all_models_val_comparison.png          (val F1 + val AUC for all models + GEL)
+#           results/plots/depth_scaling_caalmix_matrix.png       (depth-scaling 3×2 ablation matrix)
 ```
 
 Full results: `results/gel_eval_results.log`

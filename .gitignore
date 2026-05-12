@@ -45,3 +45,6 @@ review/expert_review.csv
 
 # Claude Code local settings
 .claude/
+
+# Presentation assets folder (images, visual slides — not source code)
+Presentation Content/
