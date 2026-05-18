@@ -26,6 +26,7 @@ annotated for classification, localization, and segmentation.
 | 1 | GEL Ensemble | Three-model ensemble: RC → Asymmetric OAM → PDWF → BVG gate | AUC + F1 (val primary) | **Complete** — val AUC 90.6%, val F1 73.9%; best on all val metrics; γ=11.4, δ=0.21 (joint grid search) |
 | 2 | YOLOv8s / YOLOv8s-seg / YOLOv8m | Localization & segmentation | mAP@0.5 | Complete |
 | 3 | — | XAI (CBM + Prototypes + Counterfactuals) | — | Descoped — thesis novelty: GEL ensemble + empirical findings |
+| 4 | EA-series (20 methods) | Ensemble ablations — GEL v3 vs full literature taxonomy (Families A–E) | Val F1 vs GEL v3 | **In progress** — jury 15 Jul 2026 |
 
 Explainability is delivered via GradCAM (DenseNet-169 denseblock4 heatmap) and YOLO
 bounding box detection authenticated by the BVG gate — providing visual evidence alongside
@@ -105,7 +106,22 @@ and detection ablation studies.
 │   ├── experiments_efficientnet.csv
 │   ├── gel_eval_results.log          # GEL evaluation output — both splits, baselines vs ensemble
 │   └── plots/                    # Training curves (gitignored)
-├── xai/                      # XAI pillar implementations (Phase 3 — pending)
+├── xai/                      # XAI pillar implementations (Phase 3 — descoped)
+├── Ensemble_Ablations/       # Phase 4 — EA-series ensemble ablations
+│   ├── ensemble_main.py          # CLI runner — --method / --family / --all
+│   ├── ea_readme.md              # Phase 4 full documentation
+│   ├── common/eval.py            # Shared harness: threshold sweep, AUC, acc, specificity, CSV writers
+│   ├── data/
+│   │   ├── all_base.csv          # review/all.csv minus gel columns — EA input
+│   │   └── build_features.py     # all_base.csv -> all_EA.csv; 4 feature tiers
+│   ├── EA_A_Averaging/           # Family A — parameter-free (EA-A1 to EA-A4)
+│   ├── EA_B_Weighting/           # Family B — static/dynamic weighting (EA-B1 to EA-B5)
+│   ├── EA_C_Stacking/            # Family C — learned meta-combiners (EA-C1 to EA-C5)
+│   ├── EA_D_Gating/              # Family D — per-sample gating (EA-D1 to EA-D4)
+│   ├── EA_E_Cascading/           # Family E — confidence cascades (EA-E1 to EA-E2)
+│   └── results/
+│       ├── EA_comparative_table.csv  # Concise view: val/test F1+AUC, vs-GEL deltas, references
+│       └── EA_results.csv            # Full view: train/val/test F1, acc, recall, spec, threshold
 └── weights/                  # Saved model weights (gitignored)
 ```
 
@@ -996,6 +1012,69 @@ The FracAssist ensemble (DenseNet 72.4% / ResNet 68.9% / EfficientNet 67.1%) sit
 - `--debug` flag overrides `epochs=1` for fast pipeline validation without touching configs.
 - All classification training logs saved to `results/logs/`.
 - Post-training threshold sweep (0.05–0.95, step 0.025) runs automatically and saves the optimal threshold into the checkpoint.
+
+---
+
+## Phase 4 — Ensemble Ablations (EA-Series)
+
+Benchmarking GEL v3 against 20 literature-mapped ensemble methods using the 3 frozen CNN classifiers as base learners. Goal: position GEL v3 at the top of a deliberately mapped ensemble taxonomy to make the thesis claim defensible at the jury.
+
+**Input:** `Ensemble_Ablations/data/all_base.csv` — model probabilities + labels, GEL columns stripped.
+**Full documentation:** `Ensemble_Ablations/ea_readme.md`
+
+```bash
+# from repo root
+python Ensemble_Ablations/ensemble_main.py --method EA-A1   # single method
+python Ensemble_Ablations/ensemble_main.py --family A        # full family
+python Ensemble_Ablations/ensemble_main.py --all             # all 20 methods
+```
+
+### EA-Series Method Catalogue
+
+| Family | EA-IDs | Description | Type |
+|--------|--------|-------------|------|
+| A — Averaging | EA-A1 to EA-A4 | Parameter-free floor: mean, product, max, calibrated mean | LIT/ORIG |
+| B — Weighting | EA-B1 to EA-B5 | F1/AUC/RC/confidence/diversity weighting — isolates GEL's RC stage | LIT/ORIG |
+| C — Stacking | EA-C1 to EA-C5 | Learned meta-combiners: logistic regression, MLP, GBT, decision template, feature-engineered | LIT/ORIG |
+| D — Gating | EA-D1 to EA-D4 | Per-sample gating: confidence selection, META-DES, disagreement, region-of-competence — isolates GEL's OAM stage | LIT/ORIG |
+| E — Cascading | EA-E1 to EA-E2 | Confidence cascade, uncertainty-escalation cascade | LIT/ORIG |
+
+**EA-B2** (RC power weighting) is the single most important ablation — quantifies the standalone contribution of GEL's Reliability Coefficient stage vs the full 4-stage pipeline.
+
+### GEL v3 Baseline (fixed reference for all EA comparisons)
+
+| Split | F1 | AUC | Recall | Precision | Threshold |
+|-------|----|-----|--------|-----------|-----------|
+| Val   | 0.7394 | 0.9060 | 0.7439 | 0.7349 | 0.400 |
+| Test  | 0.6718 | 0.8916 | 0.7213 | 0.6286 | 0.325 |
+
+### EA Results (updated as methods complete)
+
+Full metrics per split: `Ensemble_Ablations/results/EA_results.csv`
+
+| EA-ID | Method | Val F1 | Val AUC | vs GEL F1 | vs GEL AUC | Status |
+|-------|--------|--------|---------|-----------|------------|--------|
+| GEL-v3 | Gated Ensemble Logic (baseline) | 0.7394 | 0.9060 | — | — | Baseline |
+| EA-A1 | Mean (sum rule) | 0.7383 | 0.9044 | −0.0011 | −0.0016 | Done |
+| EA-A2 | Product rule | — | — | — | — | Pending |
+| EA-A3 | Max rule | — | — | — | — | Pending |
+| EA-A4 | Calibrated mean | — | — | — | — | Pending |
+| EA-B1 | F1-weighted average | — | — | — | — | Pending |
+| EA-B2 | RC power weighting | — | — | — | — | Pending |
+| EA-B3 | AUC-weighted average | — | — | — | — | Pending |
+| EA-B4 | Confidence-modulated weighting | — | — | — | — | Pending |
+| EA-B5 | Diversity-penalised weighting | — | — | — | — | Pending |
+| EA-C1 | Logistic regression meta-learner | — | — | — | — | Pending |
+| EA-C2 | Shallow MLP meta-learner | — | — | — | — | Pending |
+| EA-C3 | Gradient-boosted trees | — | — | — | — | Pending |
+| EA-C4 | Decision-template combiner | — | — | — | — | Pending |
+| EA-C5 | Feature-engineered stacking | — | — | — | — | Pending |
+| EA-D1 | Confidence-based selection | — | — | — | — | Pending |
+| EA-D2 | META-DES-style meta-classifier | — | — | — | — | Pending |
+| EA-D3 | Disagreement-triggered gating | — | — | — | — | Pending |
+| EA-D4 | Region-of-competence weighting | — | — | — | — | Pending |
+| EA-E1 | Confidence cascade | — | — | — | — | Pending |
+| EA-E2 | Uncertainty-escalation cascade | — | — | — | — | Pending |
 
 ---
 

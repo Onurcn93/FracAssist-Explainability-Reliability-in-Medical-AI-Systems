@@ -46,5 +46,11 @@ review/expert_review.csv
 # Claude Code local settings
 .claude/
 
+# Ensemble Ablations — local memory and generated outputs
+Ensemble_Ablations/ensemble_memory.md
+Ensemble_Ablations/plots/
+Ensemble_Ablations/logs/
+Ensemble_Ablations/data/all_EA.csv
+
 # Presentation assets folder (images, visual slides — not source code)
 Presentation Content/
