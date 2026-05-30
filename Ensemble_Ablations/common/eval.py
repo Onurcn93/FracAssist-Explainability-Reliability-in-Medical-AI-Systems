@@ -17,6 +17,10 @@ import logging
 from pathlib import Path
 
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.metrics import (
     roc_auc_score, f1_score, precision_score, recall_score, confusion_matrix
 )
@@ -108,44 +112,145 @@ def evaluate(y_true: np.ndarray, scores: np.ndarray, split: str, logger: logging
     }
 
 
-def append_to_table(row: dict) -> None:
-    """Append one result row to EA_comparative_table.csv (creates with header + GEL v3 baseline if missing)."""
-    _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    write_header = not TABLE_PATH.exists()
+def plot_confusion_matrix(
+    y_true: np.ndarray,
+    scores: np.ndarray,
+    threshold: float,
+    ea_id: str,
+    method: str,
+    plot_dir: Path,
+    logger: logging.Logger,
+) -> None:
+    """Seaborn confusion matrix heatmap at the val-optimal threshold."""
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    y_pred = (scores >= threshold).astype(int)
+    cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
 
+    labels = ["Non-fractured", "Fractured"]
+    fig, ax = plt.subplots(figsize=(5, 4))
+    sns.heatmap(
+        cm, annot=True, fmt="d", cmap="Blues",
+        xticklabels=labels, yticklabels=labels,
+        linewidths=0.5, ax=ax,
+        annot_kws={"size": 13, "weight": "bold"},
+    )
+    ax.set_xlabel("Predicted", fontsize=11)
+    ax.set_ylabel("True", fontsize=11)
+    ax.set_title(f"{ea_id}: {method}\nConfusion Matrix  (thr={threshold:.3f})", fontsize=11)
+    fig.tight_layout()
+    out = plot_dir / f"{ea_id}_confusion_matrix.png"
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    logger.info(f"Plot saved -> plots/{ea_id}/{ea_id}_confusion_matrix.png")
+
+
+def plot_confidence_accuracy(
+    y_true: np.ndarray,
+    scores: np.ndarray,
+    threshold: float,
+    ea_id: str,
+    method: str,
+    plot_dir: Path,
+    logger: logging.Logger,
+    n_bins: int = 10,
+) -> None:
+    """Reliability bar chart: for each 0.1-wide score bin, show % of correct predictions.
+
+    A prediction is correct when the thresholded label matches the true label.
+    Bars are coloured by bin midpoint (low=blue, high=red) to visually indicate
+    which end the model is confident about. Count of instances shown on each bar.
+    """
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    bins = np.linspace(0.0, 1.0, n_bins + 1)
+    y_pred = (scores >= threshold).astype(int)
+    correct = (y_pred == y_true).astype(int)
+
+    accuracies, counts, midpoints = [], [], []
+    for lo, hi in zip(bins[:-1], bins[1:]):
+        mask = (scores >= lo) & (scores < hi)
+        if mask.sum() == 0:
+            accuracies.append(np.nan)
+            counts.append(0)
+        else:
+            accuracies.append(correct[mask].mean() * 100)
+            counts.append(mask.sum())
+        midpoints.append((lo + hi) / 2)
+
+    cmap = plt.cm.RdYlGn
+    colours = [cmap(acc / 100) if not np.isnan(acc) else (0.85, 0.85, 0.85, 1) for acc in accuracies]
+    bin_labels = [f"{lo:.1f}–{hi:.1f}" for lo, hi in zip(bins[:-1], bins[1:])]
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    bars = ax.bar(range(n_bins), accuracies, color=colours, edgecolor="white", linewidth=0.8)
+
+    for bar, acc, cnt in zip(bars, accuracies, counts):
+        if cnt == 0:
+            continue
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            min(bar.get_height() + 2, 95),
+            f"{acc:.0f}%\n(n={cnt})",
+            ha="center", va="bottom", fontsize=8.5,
+        )
+
+    ax.axhline(100, color="black", linestyle="--", linewidth=0.8, alpha=0.4, label="Perfect")
+    ax.axvline(threshold * n_bins - 0.5, color="black", linestyle=":", linewidth=1.2,
+               label=f"Threshold={threshold:.3f}")
+    ax.set_xticks(range(n_bins))
+    ax.set_xticklabels(bin_labels, rotation=30, ha="right", fontsize=9)
+    ax.set_xlabel("Ensemble score bin", fontsize=11)
+    ax.set_ylabel("Prediction accuracy (%)", fontsize=11)
+    ax.set_ylim(0, 115)
+    ax.set_title(f"{ea_id}: {method}\nConfidence–Accuracy (val)", fontsize=11)
+    ax.legend(fontsize=9)
+    fig.tight_layout()
+    out = plot_dir / f"{ea_id}_confidence_accuracy.png"
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    logger.info(f"Plot saved -> plots/{ea_id}/{ea_id}_confidence_accuracy.png")
+
+
+def _upsert_csv(path: Path, fieldnames: list, row: dict, seed_rows: list = None) -> None:
+    """Write row to CSV, replacing any existing row with the same ea_id (idempotent).
+
+    If the file does not exist, it is created with the header and optional seed_rows first.
+    """
+    _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    ea_id = row["ea_id"]
+
+    if path.exists():
+        with open(path, newline="", encoding="utf-8") as f:
+            existing = list(csv.DictReader(f))
+        rows = [r for r in existing if r.get("ea_id") != ea_id]
+        rows.append(row)
+    else:
+        rows = (seed_rows or []) + [row]
+
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore", restval="")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+_GEL_BASELINE_ROW = {
+    "ea_id": "GEL-v3", "method": "Gated Ensemble Logic",
+    "family": "Custom 4-stage", "type": "BASELINE",
+    "val_f1": GEL_V3_VAL_F1, "val_auc": GEL_V3_VAL_AUC,
+    "val_recall": 0.7439, "val_precision": 0.7349, "val_threshold": 0.400,
+    "test_f1": 0.6718, "test_auc": 0.8916,
+    "test_recall": 0.7213, "test_precision": 0.6286, "test_threshold": 0.325,
+    "vs_gel_val_f1": 0.0, "vs_gel_val_auc": 0.0,
+    "reference": "This thesis", "notes": "GEL v3 grid-optimal gamma=11.4 delta=0.21",
+}
+
+
+def append_to_table(row: dict) -> None:
+    """Upsert one result row into EA_comparative_table.csv (idempotent on ea_id)."""
     row["vs_gel_val_f1"]  = round(row.get("val_f1",  0) - GEL_V3_VAL_F1,  4)
     row["vs_gel_val_auc"] = round(row.get("val_auc", 0) - GEL_V3_VAL_AUC, 4)
-
-    with open(TABLE_PATH, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=TABLE_HEADER, extrasaction="ignore")
-        if write_header:
-            writer.writeheader()
-            writer.writerow({
-                "ea_id": "GEL-v3", "method": "Gated Ensemble Logic",
-                "family": "Custom 4-stage", "type": "BASELINE",
-                "val_f1": GEL_V3_VAL_F1, "val_auc": GEL_V3_VAL_AUC,
-                "val_recall": 0.7439, "val_precision": 0.7349, "val_threshold": 0.400,
-                "test_f1": 0.6718, "test_auc": 0.8916,
-                "test_recall": 0.7213, "test_precision": 0.6286, "test_threshold": 0.325,
-                "vs_gel_val_f1": 0.0, "vs_gel_val_auc": 0.0,
-                "reference": "This thesis", "notes": "GEL v3 grid-optimal gamma=11.4 delta=0.21",
-            })
-        writer.writerow(row)
+    _upsert_csv(TABLE_PATH, TABLE_HEADER, row, seed_rows=[_GEL_BASELINE_ROW])
 
 
 def append_to_results(row: dict) -> None:
-    """Append comprehensive per-split metrics to EA_results.csv (creates with header if missing).
-
-    row keys follow the pattern: {split}_{metric} where split in {train, val, test}
-    and metric in {f1, auc, acc, recall, specificity, threshold}.
-    Train columns are optional — omit them for parameter-free methods.
-    """
-    _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    write_header = not RESULTS_PATH.exists()
-
-    with open(RESULTS_PATH, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=RESULTS_HEADER, extrasaction="ignore",
-                                restval="")
-        if write_header:
-            writer.writeheader()
-        writer.writerow(row)
+    """Upsert comprehensive per-split metrics into EA_results.csv (idempotent on ea_id)."""
+    _upsert_csv(RESULTS_PATH, RESULTS_HEADER, row)

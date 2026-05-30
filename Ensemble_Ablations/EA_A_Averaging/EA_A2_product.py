@@ -1,15 +1,24 @@
 """
-EA-A1: Mean (sum rule) ensemble.
+EA-A2: Product rule ensemble.
 
-Average of the three CNN softmax probabilities — equal weights, no training required.
-The canonical parameter-free floor for any ensemble evaluation.
+Multiplies the three CNN posterior probabilities and normalises the result
+to a proper probability in [0, 1]:
 
-Reference: Kuncheva 2014 — Combining Pattern Classifiers, Ch. 3;
-           Müller et al. 2022 — Medical image ensembles review.
+    score = (p1 * p2 * p3) / ((p1*p2*p3) + (1-p1)*(1-p2)*(1-p3))
+
+This is the Bayesian product rule for independent classifiers with equal
+priors (Kittler et al. 1998). Compared to the mean rule it is more
+aggressive: a single uncertain model pulls the fused score toward 0.5,
+so disagreement is penalised harder. Expected behaviour: lower recall
+(conservative in calling fractures), higher precision, lower AUC due to
+score compression.
+
+Reference: Kittler et al. 1998 — On combining classifiers, IEEE TPAMI.
 """
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
@@ -20,11 +29,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from common.eval import (get_logger, evaluate, append_to_table, append_to_results,
                          plot_confusion_matrix, plot_confidence_accuracy)
 
-EA_ID   = "EA-A1"
-METHOD  = "Mean (sum rule)"
+EA_ID   = "EA-A2"
+METHOD  = "Product rule"
 FAMILY  = "A"
 TYPE    = "LIT"
-REF     = "Kuncheva 2014; Müller et al. 2022"
+REF     = "Kittler et al. 1998"
 
 DATA_CSV  = "data/all_base.csv"
 PROB_COLS = ["resnet_probability", "densenet_probability", "efficientnet_probability"]
@@ -42,8 +51,13 @@ def run(root_dir: Path, seed: int = 42, plot: bool = True) -> dict:  # noqa: ARG
     df = pd.read_csv(root_dir / DATA_CSV)
     logger.info(f"Loaded {len(df)} rows from {DATA_CSV}")
 
-    # --- Ensemble: simple mean of the three probabilities ---
-    scores = df[PROB_COLS].mean(axis=1).values
+    probs = df[PROB_COLS].values  # shape (N, 3)
+
+    # Normalised product rule (Kittler 1998 posterior form)
+    pos = probs.prod(axis=1)                    # P(fracture) product
+    neg = (1 - probs).prod(axis=1)              # P(non-fracture) product
+    scores = pos / (pos + neg + 1e-12)          # normalise to [0, 1]
+
     labels = (df["true_label"] == "Fractured").astype(int).values
 
     val_mask  = df["split"].values == "val"
@@ -58,13 +72,13 @@ def run(root_dir: Path, seed: int = 42, plot: bool = True) -> dict:  # noqa: ARG
     if plot:
         plot_dir.mkdir(exist_ok=True)
         fig, ax = plt.subplots(figsize=(7, 4))
-        val_scores  = scores[val_mask]
-        val_labels  = labels[val_mask]
+        val_scores = scores[val_mask]
+        val_labels = labels[val_mask]
         ax.hist(val_scores[val_labels == 0], bins=30, alpha=0.6, label="Non-fractured", color="steelblue")
         ax.hist(val_scores[val_labels == 1], bins=30, alpha=0.6, label="Fractured",     color="tomato")
         ax.axvline(val_m["threshold"], color="black", linestyle="--",
                    label=f"Threshold={val_m['threshold']:.3f}")
-        ax.set_xlabel("Mean ensemble score")
+        ax.set_xlabel("Product rule score")
         ax.set_ylabel("Count")
         ax.set_title(f"{EA_ID}: {METHOD}\nVal F1={val_m['f1']:.4f}  AUC={val_m['auc']:.4f}")
         ax.legend()
@@ -87,7 +101,7 @@ def run(root_dir: Path, seed: int = 42, plot: bool = True) -> dict:  # noqa: ARG
         "test_recall":   test_m["recall"],    "test_precision":test_m["precision"],
         "test_threshold":test_m["threshold"],
         "reference": REF,
-        "notes": "No training. Equal weights. Parameter-free floor.",
+        "notes": "Normalised product rule. No training. Penalises disagreement harder than mean.",
     }
     append_to_table(row)
     logger.info(f"Row appended to EA_comparative_table.csv")

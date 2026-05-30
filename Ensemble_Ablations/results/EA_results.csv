@@ -1,1 +1,0 @@
-ea_id,method,family,type,train_f1,train_auc,train_acc,train_recall,train_specificity,train_threshold,val_f1,val_auc,val_acc,val_recall,val_specificity,val_threshold,test_f1,test_auc,test_acc,test_recall,test_specificity,test_threshold

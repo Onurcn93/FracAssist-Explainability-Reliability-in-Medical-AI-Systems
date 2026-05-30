@@ -1,3 +1,0 @@
-ea_id,method,family,type,val_f1,val_auc,val_recall,val_precision,val_threshold,test_f1,test_auc,test_recall,test_precision,test_threshold,vs_gel_val_f1,vs_gel_val_auc,reference,notes
-GEL-v3,Gated Ensemble Logic,Custom 4-stage,BASELINE,0.7394,0.906,0.7439,0.7349,0.4,0.6718,0.8916,0.7213,0.6286,0.325,0.0,0.0,This thesis,GEL v3 grid-optimal γ=11.4 δ=0.21
-EA-A1,Mean (sum rule),A,LIT,0.738255033557047,0.9043757186951522,0.6707317073170732,0.8208955223880597,0.5449999999999999,0.6929133858267716,0.8935333615631237,0.7213114754098361,0.6666666666666666,0.345,-0.0011,-0.0016,Kuncheva 2014; Müller et al. 2022,No training. Equal weights. Parameter-free floor.

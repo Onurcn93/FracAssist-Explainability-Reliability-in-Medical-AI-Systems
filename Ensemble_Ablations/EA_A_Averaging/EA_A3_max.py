@@ -1,11 +1,21 @@
 """
-EA-A1: Mean (sum rule) ensemble.
+EA-A3: Max rule ensemble.
 
-Average of the three CNN softmax probabilities — equal weights, no training required.
-The canonical parameter-free floor for any ensemble evaluation.
+Takes the maximum of the three CNN posterior probabilities as the ensemble score:
 
-Reference: Kuncheva 2014 — Combining Pattern Classifiers, Ch. 3;
-           Müller et al. 2022 — Medical image ensembles review.
+    score = max(p1, p2, p3)
+
+This is the most optimistic combiner (Kittler et al. 1998): the ensemble fires
+positive if ANY single model is highly confident, regardless of disagreement from
+the other two. Compared to the mean rule it is recall-biased — a single confident
+model dominates, so uncertain partners are ignored rather than averaged down.
+
+Expected behaviour: higher recall (catches more fractures), lower precision
+(more false positives), potentially lower AUC (the score is bounded above by the
+most confident model, which compresses the distribution at the high end and may
+reduce discrimination).
+
+Reference: Kittler et al. 1998 — On combining classifiers, IEEE TPAMI.
 """
 
 from pathlib import Path
@@ -20,11 +30,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from common.eval import (get_logger, evaluate, append_to_table, append_to_results,
                          plot_confusion_matrix, plot_confidence_accuracy)
 
-EA_ID   = "EA-A1"
-METHOD  = "Mean (sum rule)"
+EA_ID   = "EA-A3"
+METHOD  = "Max rule"
 FAMILY  = "A"
 TYPE    = "LIT"
-REF     = "Kuncheva 2014; Müller et al. 2022"
+REF     = "Kittler et al. 1998"
 
 DATA_CSV  = "data/all_base.csv"
 PROB_COLS = ["resnet_probability", "densenet_probability", "efficientnet_probability"]
@@ -42,8 +52,8 @@ def run(root_dir: Path, seed: int = 42, plot: bool = True) -> dict:  # noqa: ARG
     df = pd.read_csv(root_dir / DATA_CSV)
     logger.info(f"Loaded {len(df)} rows from {DATA_CSV}")
 
-    # --- Ensemble: simple mean of the three probabilities ---
-    scores = df[PROB_COLS].mean(axis=1).values
+    # Max rule: most optimistic combiner — dominated by the most confident model
+    scores = df[PROB_COLS].max(axis=1).values
     labels = (df["true_label"] == "Fractured").astype(int).values
 
     val_mask  = df["split"].values == "val"
@@ -56,15 +66,15 @@ def run(root_dir: Path, seed: int = 42, plot: bool = True) -> dict:  # noqa: ARG
 
     # --- Plot: score distribution on val ---
     if plot:
-        plot_dir.mkdir(exist_ok=True)
+        plot_dir.mkdir(parents=True, exist_ok=True)
         fig, ax = plt.subplots(figsize=(7, 4))
-        val_scores  = scores[val_mask]
-        val_labels  = labels[val_mask]
+        val_scores = scores[val_mask]
+        val_labels = labels[val_mask]
         ax.hist(val_scores[val_labels == 0], bins=30, alpha=0.6, label="Non-fractured", color="steelblue")
         ax.hist(val_scores[val_labels == 1], bins=30, alpha=0.6, label="Fractured",     color="tomato")
         ax.axvline(val_m["threshold"], color="black", linestyle="--",
                    label=f"Threshold={val_m['threshold']:.3f}")
-        ax.set_xlabel("Mean ensemble score")
+        ax.set_xlabel("Max rule score")
         ax.set_ylabel("Count")
         ax.set_title(f"{EA_ID}: {METHOD}\nVal F1={val_m['f1']:.4f}  AUC={val_m['auc']:.4f}")
         ax.legend()
@@ -87,7 +97,7 @@ def run(root_dir: Path, seed: int = 42, plot: bool = True) -> dict:  # noqa: ARG
         "test_recall":   test_m["recall"],    "test_precision":test_m["precision"],
         "test_threshold":test_m["threshold"],
         "reference": REF,
-        "notes": "No training. Equal weights. Parameter-free floor.",
+        "notes": "Max rule. No training. Most optimistic combiner — dominated by the highest-confidence model.",
     }
     append_to_table(row)
     logger.info(f"Row appended to EA_comparative_table.csv")
