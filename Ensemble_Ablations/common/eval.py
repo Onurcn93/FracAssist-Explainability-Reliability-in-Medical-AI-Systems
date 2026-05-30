@@ -210,6 +210,68 @@ def plot_confidence_accuracy(
     logger.info(f"Plot saved -> plots/{ea_id}/{ea_id}_confidence_accuracy.png")
 
 
+def plot_training_curve(
+    ea_id: str,
+    method: str,
+    plot_dir: Path,
+    logger: logging.Logger,
+    train_series: list,
+    val_series: list,
+    x_label: str = "Iteration",
+    train_label: str = "Train loss",
+    val_label: str = "Val metric",
+    best_idx: int = None,
+    dual_axis: bool = False,
+    x_values: list = None,
+    x_log: bool = False,
+) -> None:
+    """Generic training / regularisation-path curve.
+
+    dual_axis=True: train_series on left y-axis, val_series on right y-axis
+                    (use when metrics are on different scales, e.g. loss vs accuracy).
+    dual_axis=False: both series share the same y-axis (e.g. both are log-loss).
+    x_values: optional list of x-axis tick values (e.g. C grid). If None, uses range(len).
+    x_log: log-scale x-axis (useful for regularisation paths over C or alpha).
+    """
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    xs = x_values if x_values is not None else list(range(len(train_series)))
+
+    fig, ax1 = plt.subplots(figsize=(8, 4))
+    ax1.plot(xs, train_series, "o-" if x_values else "-",
+             color="steelblue", linewidth=1.8, markersize=5, label=train_label)
+    ax1.set_xlabel(x_label)
+    ax1.set_ylabel(train_label, color="steelblue")
+    ax1.tick_params(axis="y", labelcolor="steelblue")
+    if x_log:
+        ax1.set_xscale("log")
+
+    if dual_axis:
+        ax2 = ax1.twinx()
+        ax2.plot(xs, val_series, "o--" if x_values else "--",
+                 color="tomato", linewidth=1.8, markersize=5, label=val_label)
+        ax2.set_ylabel(val_label, color="tomato")
+        ax2.tick_params(axis="y", labelcolor="tomato")
+        lines1, lbl1 = ax1.get_legend_handles_labels()
+        lines2, lbl2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, lbl1 + lbl2, fontsize=9)
+    else:
+        ax1.plot(xs, val_series, "o--" if x_values else "--",
+                 color="tomato", linewidth=1.8, markersize=5, label=val_label)
+        ax1.legend(fontsize=9)
+
+    if best_idx is not None:
+        bx = xs[best_idx] if x_values else best_idx
+        ax1.axvline(bx, color="gray", linestyle=":", linewidth=1.2,
+                    label=f"Best @ {bx}")
+
+    ax1.set_title(f"{ea_id}: {method}\nTraining curve")
+    fig.tight_layout()
+    out = plot_dir / f"{ea_id}_training_curve.png"
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    logger.info(f"Plot saved -> plots/{ea_id}/{ea_id}_training_curve.png")
+
+
 def _upsert_csv(path: Path, fieldnames: list, row: dict, seed_rows: list = None) -> None:
     """Write row to CSV, replacing any existing row with the same ea_id (idempotent).
 
