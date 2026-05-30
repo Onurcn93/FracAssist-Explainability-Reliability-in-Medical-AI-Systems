@@ -255,7 +255,7 @@ def main():
         log["temperatures"] = temperatures
     with open(LOG_DIR / "build_features.log", "w") as f:
         json.dump(log, f, indent=2)
-    print(f"[build_features] Transform log → logs/build_features.log")
+    print(f"[build_features] Transform log -> logs/build_features.log")
 
 
 if __name__ == "__main__":
