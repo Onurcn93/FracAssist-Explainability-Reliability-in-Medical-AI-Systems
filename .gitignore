@@ -51,7 +51,7 @@ Ensemble_Ablations/ensemble_memory.md
 Ensemble_Ablations/plots/
 Ensemble_Ablations/logs/
 Ensemble_Ablations/data/all_EA.csv
-Ensemble_Ablations/results/*.csv
+# Ensemble_Ablations/results/*.csv  # results CSVs are tracked
 
 # Presentation assets folder (images, visual slides — not source code)
 Presentation Content/
