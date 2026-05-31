@@ -50,6 +50,7 @@ REGISTRY = {
     "EA-D2": ("EA_D_Gating.EA_D2_meta_des",             "META-DES-style meta-classifier"),
     "EA-D3": ("EA_D_Gating.EA_D3_disagreement_gating",  "Disagreement-triggered gating"),
     "EA-D4": ("EA_D_Gating.EA_D4_region_competence",    "Region-of-competence weighting"),
+    "EA-D5": ("EA_D_Gating.EA_D5_body_part_competence", "Body-part-constrained competence"),
     # Family E — Cascading
     "EA-E1": ("EA_E_Cascading.EA_E1_confidence_cascade",       "Confidence cascade"),
     "EA-E2": ("EA_E_Cascading.EA_E2_uncertainty_escalation",   "Uncertainty-escalation cascade"),
