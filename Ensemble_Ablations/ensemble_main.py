@@ -93,7 +93,7 @@ def main():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--method", type=str, help="Run a single method, e.g. EA-A1")
     group.add_argument("--family", type=str, choices=list(FAMILIES), help="Run all methods in a family (A/B/C/D/E)")
-    group.add_argument("--all", action="store_true", help="Run all 20 EA methods")
+    group.add_argument("--all", action="store_true", help="Run all methods in the registry (note: use ea_test_set_evaluation.py for the full 25-method test-set run)")
     parser.add_argument("--seed",    type=int,  default=42,    help="Random seed (default: 42)")
     parser.add_argument("--no-plot", action="store_true",      help="Skip plot generation")
     args = parser.parse_args()

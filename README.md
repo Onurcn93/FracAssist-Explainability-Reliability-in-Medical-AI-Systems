@@ -26,7 +26,7 @@ annotated for classification, localization, and segmentation.
 | 1 | GEL Ensemble | Three-model ensemble: RC → Asymmetric OAM → PDWF → BVG gate | AUC + F1 (val primary) | **Complete** — val AUC 90.6%, val F1 73.9%; best on all val metrics; γ=11.4, δ=0.21 (joint grid search) |
 | 2 | YOLOv8s / YOLOv8s-seg / YOLOv8m | Localization & segmentation | mAP@0.5 | Complete |
 | 3 | — | XAI (CBM + Prototypes + Counterfactuals) | — | Descoped — thesis novelty: GEL ensemble + empirical findings |
-| 4 | EA-series (25 methods) | Ensemble ablations — GEL v3 vs full literature taxonomy (Families A–E) | Val F1 + AUC vs GEL v3 | **Complete** — GEL v3 wins AUC (0.9060); no EA method exceeds it; EA-E2 ties F1 |
+| 4 | EA-series (25 methods) | Ensemble ablations — GEL v3 vs full literature taxonomy (Families A–E) | Val F1 + AUC vs GEL v3 | **Complete** — GEL v3 wins AUC (0.9060); no EA method exceeds it; EA-E2 leads val F1 by +0.73pp but ties AUC (dual-optimal) |
 
 Explainability is delivered via GradCAM (DenseNet-169 denseblock4 heatmap) and YOLO
 bounding box detection authenticated by the BVG gate — providing visual evidence alongside
@@ -109,6 +109,7 @@ and detection ablation studies.
 ├── xai/                      # XAI pillar implementations (Phase 3 — descoped)
 ├── Ensemble_Ablations/       # Phase 4 — EA-series ensemble ablations
 │   ├── ensemble_main.py          # CLI runner — --method / --family / --all
+│   ├── ea_test_set_evaluation.py # Standalone test-set eval for all 25 methods — saves EA_test_evaluation.csv
 │   ├── ea_readme.md              # Phase 4 full documentation
 │   ├── common/eval.py            # Shared harness: threshold sweep, AUC, acc, specificity, CSV writers
 │   ├── data/
@@ -121,7 +122,8 @@ and detection ablation studies.
 │   ├── EA_E_Cascading/           # Family E — confidence cascades (EA-E1 to EA-E2)
 │   └── results/
 │       ├── EA_comparative_table.csv  # Concise view: val/test F1+AUC, vs-GEL deltas, references
-│       └── EA_results.csv            # Full view: train/val/test F1, acc, recall, spec, threshold
+│       ├── EA_results.csv            # Full view: train/val/test F1, acc, recall, spec, threshold
+│       └── EA_test_evaluation.csv    # Test-set eval: 25 methods + GEL v3; F1/AUC/recall/precision
 └── weights/                  # Saved model weights (gitignored)
 ```
 
@@ -1027,6 +1029,10 @@ Benchmarking GEL v3 against 25 literature-mapped ensemble methods (20 core + 5 C
 python Ensemble_Ablations/ensemble_main.py --method EA-A1   # single method
 python Ensemble_Ablations/ensemble_main.py --family A        # full family
 python Ensemble_Ablations/ensemble_main.py --all             # all methods
+
+# Standalone test-set evaluation (all 25 methods + GEL v3 reference row)
+python Ensemble_Ablations/ea_test_set_evaluation.py
+# → Ensemble_Ablations/results/EA_test_evaluation.csv
 ```
 
 ### EA-Series Method Catalogue
@@ -1052,6 +1058,7 @@ python Ensemble_Ablations/ensemble_main.py --all             # all methods
 
 Full metrics per split: `Ensemble_Ablations/results/EA_results.csv`
 Concise view with vs-GEL deltas and references: `Ensemble_Ablations/results/EA_comparative_table.csv`
+Test-set evaluation (all 25 methods, test F1/AUC/recall/precision): `Ensemble_Ablations/results/EA_test_evaluation.csv`
 
 | EA-ID | Method | Family | Val F1 | Val AUC | vs GEL F1 | vs GEL AUC |
 |-------|--------|--------|--------|---------|-----------|------------|
