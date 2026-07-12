@@ -81,8 +81,9 @@ OUTPUT_COLS = [
 GEL_V3_ROW = {
     "ea_id": "GEL-v3", "method": "Gated Ensemble Logic (BVG+RC+OAM+PDWF)",
     "family": "—", "type": "NOVEL",
-    "test_f1": 0.6718, "test_auc": 0.8916,
-    "test_recall": 0.7213, "test_precision": 0.6286, "test_threshold": 0.325,
+    # Test at the deployed/val-optimal threshold 0.40 (carried), not test-swept 0.325.
+    "test_f1": 0.6614, "test_auc": 0.8916,
+    "test_recall": 0.6885, "test_precision": 0.6364, "test_threshold": 0.400,
     "val_f1": 0.7394, "val_auc": 0.9060,
 }
 

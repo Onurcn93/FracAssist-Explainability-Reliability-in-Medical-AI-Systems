@@ -154,8 +154,11 @@ def main(data_dir: Path = DATA_DIR):
         m_saved = _evaluate(labels, probs, saved_thresh, frac_idx)
         m_opt   = _evaluate(labels, probs, opt_thresh,   frac_idx)
 
-        use_thresh = opt_thresh if m_opt["f1"] >= m_saved["f1"] else saved_thresh
-        m_use      = m_opt      if m_opt["f1"] >= m_saved["f1"] else m_saved
+        # Honest held-out protocol: report at the checkpoint's validation-selected
+        # threshold, carried unchanged to whatever split is evaluated. Never pick a
+        # threshold by its F1 on the current split (that would tune on the test set).
+        use_thresh = saved_thresh
+        m_use      = m_saved
 
         source = "colab" if "colab" in str(ckpt_path) else "local"
         exp_id = ckpt.get("exp_id", ckpt_path.stem)

@@ -22,7 +22,7 @@ annotated for classification, localization, and segmentation.
 | 1 | ResNet-50 | Depth-scaling ablation — standard (E10) + CAALMIX (E12) | F1 (fractured class) | Complete — E10 63.2%, E12 62.3%; CAALMIX inverts −0.9pp at 25M params |
 | 1 | DenseNet-169 | Binary fracture classification (D-series) | F1 (fractured class) | Complete — D1 champion (72.4%) |
 | 1 | DenseNet-169 | CAALMIX augmentation ablation (D3/D4/D5) | F1 (fractured class) | D3 done (CLAHE hurts −6.2pp); D4/D5 skipped |
-| 1 | EfficientNet-B3 | Binary fracture classification (F-series) | F1 (fractured class) | F1 baseline (67.1% val / 56.3% test); F2 CLAHE confirms CLAHE hurts (−4.0pp) |
+| 1 | EfficientNet-B3 | Binary fracture classification (F-series) | F1 (fractured class) | F1 baseline (67.1% val / 53.9% test); F2 CLAHE confirms CLAHE hurts (−4.0pp) |
 | 1 | GEL Ensemble | Three-model ensemble: RC → Asymmetric OAM → PDWF → BVG gate | AUC + F1 (val primary) | **Complete** — val AUC 90.6%, val F1 73.9%; best on all val metrics; γ=11.4, δ=0.21 (joint grid search) |
 | 2 | YOLOv8s / YOLOv8s-seg / YOLOv8m | Localization & segmentation | mAP@0.5 | Complete |
 | 3 | — | XAI (CBM + Prototypes + Counterfactuals) | — | Descoped — thesis novelty: GEL ensemble + empirical findings |
@@ -635,13 +635,13 @@ DenseNet-169 (ImageNet pretrained), full fine-tune, Adam. Same ImageFolder split
 | Val | D3 | 0.500 | 66.2% | 59.8% | 74.2% | — | 0.861 | Done — CLAHE hurts (−6.2pp vs D1) |
 | Val | D4 | — | — | — | — | — | — | Skipped — D3 regression unrecoverable |
 | Val | D5 | — | — | — | — | — | — | Skipped — D3 regression unrecoverable |
-| Test | D1 ★ | 0.350 | 68.4% | 65.6% | 71.4% | 88.9% | 0.847 | Done |
-| Test | D2 | 0.075 | 58.7% | 63.9% | 54.2% | 83.4% | 0.852 | Done |
+| Test | D1 ★ | 0.175 | 67.8% | 67.2% | 68.3% | 88.3% | 0.847 | Done |
+| Test | D2 | 0.475 | 47.4% | 37.7% | 63.9% | 84.6% | 0.852 | Done |
 
 **D1 is the approved DenseNet-169 baseline.** Inference threshold: 0.175 (val-sweep optimal).
 
 Key findings:
-- D1 beats ResNet-18 E4a by +6.6pp F1 on val (72.4% vs 65.8%) and +5.2pp on test (68.4% vs 63.2%).
+- D1 beats ResNet-18 E4a by +6.6pp F1 on val (72.4% vs 65.8%) and on test as well (67.8% at carried threshold).
 - D2's cosine warmup + dropout=0.3 **hurts** DenseNet: dense connections already act as implicit regularisation; additional dropout collapses threshold stability and destabilises recall.
 - D1 best checkpoint at epoch 13; model then overfits. Early stopping with patience=15 applied for D3/D4/D5.
 - TTA hurts D1 (−3.95pp on val) — all DenseNet inference uses single forward pass.
@@ -669,13 +669,13 @@ Early stopping patience=15. TTA tested: −3.59pp (skip — consistent with all 
 | ID | Split | Threshold | F1 | Recall | Precision | Acc | AUC |
 |----|-------|-----------|-----|--------|-----------|-----|-----|
 | **F1 ★** | Val | 0.525 | **67.1%** | 68.3% | 65.9% | 88.7% | 0.883 |
-| **F1 ★** | Test | 0.325 | **56.3%** | 65.6% | 49.4% | 81.3% | 0.818 |
+| **F1 ★** | Test | 0.525 | **53.9%** | 50.8% | 57.4% | 84.0% | 0.818 |
 | F2 | Val | 0.475 | 63.1% | 64.6% | 61.6% | — | 0.859 |
 
 F2 vs F1: **−4.0pp** (val F1) — CLAHE hurts EfficientNet-B3, same direction as DenseNet-169.
 Compound scaling handles low-contrast X-rays implicitly (same mechanism as DenseNet dense connections). F3/F4 skipped.
 
-Val→test generalization gap (F1): −10.7pp F1 (larger than ResNet −2.6pp and DenseNet −4.0pp).
+Val→test generalization gap (F1): −13.2pp F1 (the largest of the three; ResNet-18 −3.5pp, DenseNet-169 −4.6pp, at carried thresholds).
 GEL F1 anchor: 0.671 (F1 val-based). Weights: `weights/F1_best.pth`
 
 ---
@@ -734,13 +734,13 @@ Hyperparameters tuned via three-stage sweep using `utils/tune_gel.py`.
 | Val | DenseNet-169 (D1) | 0.175 | 72.4% | 72.0% | 72.8% | 0.844 |
 | Val | EfficientNet-B3 (F1) | 0.525 | 67.1% | 68.3% | 65.9% | 0.883 |
 | Val | **GEL v3 ★** | **0.400** | **73.9%** | **74.4%** | **73.5%** | **0.906** |
-| Test | ResNet-18 (E6) | 0.425 | 68.9% | 68.9% | 68.9% | 0.899 |
-| Test | DenseNet-169 (D1) | 0.350 | 68.4% | 65.6% | 71.4% | 0.847 |
-| Test | EfficientNet-B3 (F1) | 0.325 | 56.3% | 65.6% | 49.4% | 0.818 |
-| Test | **GEL v3 ★** | **0.325** | **67.2%** | **72.1%** | **62.9%** | **0.892** |
+| Test | ResNet-18 (E6) | 0.525 | 65.5% | 59.0% | 73.5% | 0.899 |
+| Test | DenseNet-169 (D1) | 0.175 | 67.8% | 67.2% | 68.3% | 0.847 |
+| Test | EfficientNet-B3 (F1) | 0.525 | 53.9% | 50.8% | 57.4% | 0.818 |
+| Test | **GEL v3 ★** | **0.400** | **66.1%** | **68.9%** | **63.6%** | **0.892** |
 
 GEL achieves the **best AUC and best F1 on val**, exceeding all individual classifiers:
-- **Val AUC 90.6%** — best of all models (+1.8pp over next-best ResNet 88.9%, +6.7pp over DenseNet 84.4%)
+- **Val AUC 90.6%** — best of all models (+1.7pp over next-best ResNet 88.9%, +6.2pp over DenseNet 84.4%)
 - **Val F1 73.9%** — best of all models (+1.5pp over DenseNet 72.4%, the previous F1 leader)
 - **Both primary val metrics won — no hedging on F1 required.**
 
@@ -919,7 +919,7 @@ and are served as Flask static files.
 
 ### GEL — Gated Ensemble Logic (primary mode)
 
-The default inference mode is **GEL**, a three-stage reliability architecture.
+The default inference mode is **GEL**, a four-stage reliability architecture.
 All GEL math lives in `gel/gel_pipeline.py` (canonical `apply_gel()`). All hyperparameters
 are in `gel/gel_config.py` (single source of truth). `FracAssist_Inference/config.py`,
 `utils/eval_gel.py`, and `review/generate_predictions.py` all import from `gel/` —
@@ -979,7 +979,7 @@ When these conditions break, GEL adds complexity without reliability gain and ca
 - **A dominant expert** (~0.90 F1): the weaker models vote incorrectly on the majority of cases the expert gets right, diluting the strong signal.
 - **Homogeneous predictions**: if all three models predict identically, PDWF reduces to a single weighted model — ensemble overhead with no diversity benefit.
 
-The FracAssist ensemble (DenseNet 72.4% / ResNet 68.9% / EfficientNet 67.1%) sits in the optimal regime: close enough in F1 that diversity is preserved (DenseNet earns 43.1% weight at γ=11.4, not 100%), structurally distinct architectures, and empirically complementary failure modes — producing val AUC 90.6% vs. best individual 88.3%.
+The FracAssist ensemble (DenseNet 72.4% / ResNet 68.9% / EfficientNet 67.1%) sits in the optimal regime: close enough in F1 that diversity is preserved (DenseNet earns 43.1% weight at γ=11.4, not 100%), structurally distinct architectures, and empirically complementary failure modes — producing val AUC 90.6% vs. best individual 88.9%.
 
 **Inference modes** (selectable via UI dropdown):
 
@@ -1052,7 +1052,7 @@ python Ensemble_Ablations/ea_test_set_evaluation.py
 | Split | F1 | AUC | Recall | Precision | Threshold |
 |-------|----|-----|--------|-----------|-----------|
 | Val   | 0.7394 | 0.9060 | 0.7439 | 0.7349 | 0.400 |
-| Test  | 0.6718 | 0.8916 | 0.7213 | 0.6286 | 0.325 |
+| Test  | 0.6614 | 0.8916 | 0.6885 | 0.6364 | 0.400 |
 
 ### EA Results — Complete (25 methods, val-set ranking)
 

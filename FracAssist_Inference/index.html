@@ -183,11 +183,11 @@
             <div class="health-grid">
                 <div class="health-card">
                     <div class="health-card-title">ResNet-18 · E6</div>
-                    <div class="health-row"><span>F1 (Fractured)</span><span class="text-teal">68.92% val / 68.85% test</span></div>
-                    <div class="health-row"><span>Recall</span><span class="alert-amber">62.20% val / 68.85% test</span></div>
-                    <div class="health-row"><span>Precision</span><span>77.27% val / 68.85% test</span></div>
+                    <div class="health-row"><span>F1 (Fractured)</span><span class="text-teal">68.92% val / 65.45% test</span></div>
+                    <div class="health-row"><span>Recall</span><span class="alert-amber">62.20% val / 59.02% test</span></div>
+                    <div class="health-row"><span>Precision</span><span>77.27% val / 73.47% test</span></div>
                     <div class="health-row"><span>AUC</span><span class="text-teal">0.889 val / 0.899 test</span></div>
-                    <div class="health-row"><span>Threshold</span><span>0.525 val-optimal · 0.425 test-sweep</span></div>
+                    <div class="health-row"><span>Threshold</span><span>0.525 val-optimal (carried to test)</span></div>
                     <div class="health-row"><span>Split</span><span class="text-teal">val + test confirmed</span></div>
                 </div>
                 <div class="health-card">
@@ -200,27 +200,27 @@
                 </div>
                 <div class="health-card">
                     <div class="health-card-title">DenseNet-169 · D1</div>
-                    <div class="health-row"><span>F1 (Fractured)</span><span class="text-teal">72.39% val / 68.38% test</span></div>
-                    <div class="health-row"><span>Recall</span><span class="alert-amber">71.95% val / 65.57% test</span></div>
-                    <div class="health-row"><span>Precision</span><span>72.84% val / 71.43% test</span></div>
+                    <div class="health-row"><span>F1 (Fractured)</span><span class="text-teal">72.39% val / 67.77% test</span></div>
+                    <div class="health-row"><span>Recall</span><span class="alert-amber">71.95% val / 67.21% test</span></div>
+                    <div class="health-row"><span>Precision</span><span>72.84% val / 68.33% test</span></div>
                     <div class="health-row"><span>AUC</span><span class="text-teal">0.844 val / 0.847 test</span></div>
-                    <div class="health-row"><span>Threshold</span><span>0.175 val-optimal · 0.350 test-sweep</span></div>
+                    <div class="health-row"><span>Threshold</span><span>0.175 val-optimal (carried to test)</span></div>
                     <div class="health-row"><span>Split</span><span class="text-teal">val + test confirmed</span></div>
                 </div>
                 <div class="health-card">
                     <div class="health-card-title">EfficientNet-B3 · F1</div>
-                    <div class="health-row"><span>F1 (Fractured)</span><span class="text-teal">67.07% val / 56.34% test</span></div>
-                    <div class="health-row"><span>Recall</span><span class="alert-amber">68.29% val / 65.57% test</span></div>
-                    <div class="health-row"><span>Precision</span><span>65.88% val / 49.38% test</span></div>
+                    <div class="health-row"><span>F1 (Fractured)</span><span class="text-teal">67.07% val / 53.91% test</span></div>
+                    <div class="health-row"><span>Recall</span><span class="alert-amber">68.29% val / 50.82% test</span></div>
+                    <div class="health-row"><span>Precision</span><span>65.88% val / 57.41% test</span></div>
                     <div class="health-row"><span>AUC</span><span class="text-teal">0.883 val / 0.818 test</span></div>
-                    <div class="health-row"><span>Threshold</span><span>0.525 val-optimal · 0.325 test-sweep</span></div>
+                    <div class="health-row"><span>Threshold</span><span>0.525 val-optimal (carried to test)</span></div>
                     <div class="health-row"><span>Split</span><span class="text-teal">val + test confirmed</span></div>
                 </div>
                 <div class="health-card health-card-wide">
                     <div class="health-card-title">GEL v3 — Gated Ensemble Logic (Grid-Optimal)</div>
-                    <div class="health-row"><span>F1 (Fractured)</span><span class="text-teal">73.94% val / 67.18% test (sweep-opt) — best of all models on val</span></div>
+                    <div class="health-row"><span>F1 (Fractured)</span><span class="text-teal">73.94% val / 66.14% test — best of all models on val</span></div>
                     <div class="health-row"><span>AUC</span><span class="text-teal">0.9060 val / 0.8916 test — highest on val</span></div>
-                    <div class="health-row"><span>Threshold</span><span>0.400 val-optimal · 0.325 test-sweep</span></div>
+                    <div class="health-row"><span>Threshold</span><span>0.400 val-optimal (carried to test)</span></div>
                     <div class="health-row"><span>RC — Expert-Dominant (γ=11.4)</span><span class="text-teal">ResNet ~30.9% · DenseNet ~43.1% · EfficientNet ~26.0%</span></div>
                     <div class="health-row"><span>OAM — Asymmetric (δ=0.21)</span><span>|p_i − μ| &gt; 0.21 · HIGH outlier k=0.30 (lenient) · LOW outlier k=0.10 (aggressive) · ~19% trigger on val</span></div>
                     <div class="health-row"><span>PDWF — Performance-Driven Weighted Fusion</span><span class="text-teal">Expert-Dominant weighted fusion · F1 anchors: ResNet 0.689 · DenseNet 0.724 · EfficientNet 0.671</span></div>

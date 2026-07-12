@@ -90,9 +90,59 @@ def threshold_sweep(y_true: np.ndarray, scores: np.ndarray) -> dict:
     return best
 
 
-def evaluate(y_true: np.ndarray, scores: np.ndarray, split: str, logger: logging.Logger) -> dict:
-    """Full evaluation: threshold-swept F1 + AUC + accuracy + specificity."""
-    sweep = threshold_sweep(y_true, scores)
+def metrics_at_threshold(y_true: np.ndarray, scores: np.ndarray, threshold: float) -> dict:
+    """Full metrics at a *fixed* threshold (no sweep). Same shape as threshold_sweep()."""
+    preds = (scores >= threshold).astype(int)
+    tn, fp, fn, tp = confusion_matrix(y_true, preds, labels=[0, 1]).ravel()
+    return {
+        "f1":          float(f1_score(y_true, preds, zero_division=0)),
+        "threshold":   float(threshold),
+        "recall":      float(recall_score(y_true, preds, zero_division=0)),
+        "precision":   float(precision_score(y_true, preds, zero_division=0)),
+        "accuracy":    float((tp + tn) / len(y_true)),
+        "specificity": float(tn / (tn + fp)) if (tn + fp) > 0 else 0.0,
+    }
+
+
+# Module-level carry of the validation-selected threshold.
+# Every EA method calls evaluate() on the val split immediately before the test
+# split, so we remember the last val-swept threshold and reuse it for the next
+# test evaluation. This carries the validation operating point unchanged onto the
+# held-out test set (the test set is never used to pick a threshold) without
+# editing 25 call sites. Prefix matching also covers labels like "test (full)".
+# An explicit fixed_threshold argument always overrides the carry.
+CARRY_VAL_THRESHOLD_TO_TEST = True
+_last_val_threshold = None
+
+
+def evaluate(y_true: np.ndarray, scores: np.ndarray, split: str, logger: logging.Logger,
+             fixed_threshold: float = None) -> dict:
+    """Full evaluation: AUC + F1/accuracy/specificity.
+
+    Threshold policy:
+      * validation split (label starts with "val"): sweep to maximise F1, and
+        remember the chosen threshold.
+      * test split (label starts with "test"): reuse the remembered validation
+        threshold (carried, no sweep) so the test set never selects an operating
+        point. Set CARRY_VAL_THRESHOLD_TO_TEST = False to restore per-split sweep.
+      * explicit fixed_threshold always wins, for any split.
+    """
+    global _last_val_threshold
+    is_val  = split.startswith("val")
+    is_test = split.startswith("test")
+
+    if (fixed_threshold is None and CARRY_VAL_THRESHOLD_TO_TEST
+            and is_test and _last_val_threshold is not None):
+        fixed_threshold = _last_val_threshold
+
+    if fixed_threshold is None:
+        sweep = threshold_sweep(y_true, scores)
+    else:
+        sweep = metrics_at_threshold(y_true, scores, fixed_threshold)
+
+    if is_val:
+        _last_val_threshold = sweep["threshold"]
+
     auc   = float(roc_auc_score(y_true, scores)) if len(np.unique(y_true)) > 1 else 0.0
 
     logger.info(
@@ -299,10 +349,12 @@ _GEL_BASELINE_ROW = {
     "family": "Custom 4-stage", "type": "BASELINE",
     "val_f1": GEL_V3_VAL_F1, "val_auc": GEL_V3_VAL_AUC,
     "val_recall": 0.7439, "val_precision": 0.7349, "val_threshold": 0.400,
-    "test_f1": 0.6718, "test_auc": 0.8916,
-    "test_recall": 0.7213, "test_precision": 0.6286, "test_threshold": 0.325,
+    # Test metrics at the deployed classification threshold 0.40 (= val-optimal),
+    # carried unchanged from validation. NOT the test-swept 0.325 operating point.
+    "test_f1": 0.6614, "test_auc": 0.8916,
+    "test_recall": 0.6885, "test_precision": 0.6364, "test_threshold": 0.400,
     "vs_gel_val_f1": 0.0, "vs_gel_val_auc": 0.0,
-    "reference": "This thesis", "notes": "GEL v3 grid-optimal gamma=11.4 delta=0.21",
+    "reference": "This thesis", "notes": "GEL v3 grid-optimal gamma=11.4 delta=0.21; test @ carried thr 0.40",
 }
 
 
